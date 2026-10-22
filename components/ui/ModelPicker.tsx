@@ -33,7 +33,7 @@ export function ModelPicker() {
 
   /** A model the catalogue no longer knows: shown by its id, so it can be unticked. */
   const known = (id: string): ModelInfo =>
-    free.find((m) => m.id === id) ?? { id, name: id, context: 0, tools: false, vision: false, reasoning: false, mandatoryReasoning: false, json: false, inPerM: 0, outPerM: 0 };
+    free.find((m) => m.id === id) ?? { id, name: id, context: 0, tools: false, vision: false, reasoning: false, mandatoryReasoning: false, defaultReasoning: false, efforts: [], json: false, inPerM: 0, outPerM: 0 };
 
   const wanted = query.trim().toLowerCase();
   const matches = (m: ModelInfo) => !wanted || m.name.toLowerCase().includes(wanted) || m.id.toLowerCase().includes(wanted);

@@ -25,6 +25,16 @@ The reader chooses in **Settings → Answers**. Every free model is listed there
 
 Only free models are let through, on the server as well as in the browser: the shared key pays for the answers, and a paid model on it would be paid for out of the owner's pocket.
 
+**The models are told how much to think.** Reasoning tokens come out of the same budget as the answer, and most models think by default: OpenRouter reports which ones do, and how hard. Left to itself, a model spends four fifths of the budget thinking and writes nothing at all. A gloss is two or three sentences, so the model is told to think only where it has to, and as little as it can: `none` where it can answer without thinking, the cheapest effort where it has to.
+
+**The chain keeps its order, and it says what it did.** A model that is rate limited, gone from the list, or thinking out loud without saying anything is passed over and the next one is asked. The answer carries the name of the model that answered, and the ones the reader chose that could not answer, with the reason — so the receipt never quietly answers from somewhere else.
+
+## A reader's own key
+
+A reader can paste their own OpenRouter key, and it stays in their browser. The server needs it to make their calls, so it travels with every request — but never in the clear: the browser seals it with the server's public key (ECDH over P-256, then AES-256-GCM), and only the server can open it. What sits in the network tab is a sealed key, not the key.
+
+The keypair comes from a secret, so every instance of the app opens the same seals: `API_KEY_SECRET` if it is set, else a secret kept in the `secrets` table (run `npm run db:migrate`), else one derived from the database's own address. **Set `API_KEY_SECRET` before deploying**: it is the one that says which secret is yours, and the one to change when you want the old seals to stop working.
+
 ## Reading aloud
 
 One voice, for two things: the whole text from the top bar, and a highlighted sentence from the lens beside the highlighter. Both are Google Translate's own voice, which needs no key and no account. Where Google cannot be reached at all, Baidu Translate's answers instead — it speaks Chinese, English, Japanese and Korean, and refuses the rest.
@@ -54,8 +64,11 @@ Gloss reads in English and Chinese, and every page lives under a language: `/en/
 - `lib/i18n/format.ts` — dates, numbers and durations, written the way the language writes them
 - `lib/i18n/paths.ts` — building and rewriting paths in a language
 - `lib/i18n/translate.ts` — looking a string up, with its words filled in and its plural form chosen
+- `lib/i18n/request.ts` — the language of a request that arrives at the API
 
 The proxy sends a reader with no language in the path to the one their browser asks for, and remembers it in a cookie, so the next visit opens in the same language. The picker in the top bar changes it at any time.
+
+**The answers are written in the reader's language.** A Chinese reader gets a Chinese gloss; an English reader gets an English one, whatever language their question was in. The prompt itself stays in English, so one set of words serves every reader and the cached prefix is the same for all of them: only the language of the answer is added, and it goes after the text, in `lib/prompts.ts`. The browser says which language it is in the body of the request, and the API falls back to the cookie when it says nothing.
 
 **Adding a language:** add its code to `LOCALES` in `lib/i18n/config.ts`, add its tag and name to `LOCALE_TAGS` and `LOCALE_NAMES`, and add `lib/i18n/dictionaries/<code>.json` with the same keys as `en.json`. The tests will tell you if a key is missing or spelled differently.
 
@@ -75,6 +88,7 @@ The suite covers the language layer: negotiation, paths, formatting, the diction
 1. Clone the repo: `git clone https://github.com/Nutlope/gloss`
 2. Create a `.env.local` file (use `.env.example` for reference) and add your API keys:
    - **[OpenRouter API key](https://openrouter.ai/settings/keys)**: `OPENROUTER_API_KEY=`
+   - **The secret that seals a reader's own key**: `API_KEY_SECRET=` (any string, the same on every instance)
    - **Database URL** from [Neon](https://neon.tech): `DATABASE_URL=`
    - **Clerk keys** from [Clerk](https://clerk.com): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=` and `CLERK_SECRET_KEY=`
    - **Exa API key** (optional, for web search): `EXA_API_KEY=`

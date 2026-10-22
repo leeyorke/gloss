@@ -1,12 +1,13 @@
 import { chargeFree, checkFree, needKey } from "@/lib/quota";
 import { classify, type ShelveInput } from "@/lib/shelve";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 /** Sort one text onto the library's shelves: a topic, a few tags and a scene for its cover. */
 export async function POST(req: Request) {
-  let body: ShelveInput & { apiKey?: string };
+  let body: ShelveInput & { apiKey?: string; key?: string };
   try {
     body = await req.json();
   } catch {
@@ -16,7 +17,10 @@ export async function POST(req: Request) {
   const str = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : undefined);
   const input: ShelveInput = { title: body.title.slice(0, 300), author: str(body.author, 200), source: str(body.source, 200), dek: str(body.dek, 600), excerpt: str(body.excerpt, 3000) };
 
-  const apiKey = body.apiKey?.trim() || undefined;
+  // The reader's own key, opened from the seal the browser sent.
+  const { key: own, error: keyError } = await readerKey(body);
+  if (keyError) return Response.json({ error: keyError }, { status: 400 });
+  const apiKey = own || undefined;
   let free: Awaited<ReturnType<typeof checkFree>> | null = null;
   if (!apiKey) {
     if (!process.env.OPENROUTER_API_KEY) return needKey(null);

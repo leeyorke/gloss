@@ -5,6 +5,8 @@ import { chargeFree, checkFree, estimateUsd, needKey } from "@/lib/quota";
 import type { Usage } from "@/lib/models";
 import { allow, clientId } from "@/lib/ratelimit";
 import { searchEnabled, searchQuery, WEB_TOOL, webSearch } from "@/lib/search";
+import { localeOfRequest } from "@/lib/i18n/request";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -14,6 +16,8 @@ const MAX_DOC_CHARS = 600_000;
 
 type Body = {
   apiKey?: string;
+  /** The reader's own key, sealed for the trip: it never crosses the network in the clear. */
+  key?: string;
   /** The models to try, in order: the first one answers, the rest are fallbacks. */
   models?: string[];
   length?: string;
@@ -22,6 +26,8 @@ type Body = {
   history?: { role: "user" | "assistant"; content: string }[];
   /** Let the model search the web (on unless the reader turned it off). Fact-check always searches. */
   search?: boolean;
+  /** The language the reader is reading in: the answer is written in it. */
+  locale?: string;
 };
 
 export async function POST(req: Request) {
@@ -44,10 +50,13 @@ export async function POST(req: Request) {
   const history = (body.history ?? []).slice(-12).filter((m) => m && (m.role === "user" || m.role === "assistant"));
 
   // Only free models are let through: the shared key pays for the answers.
-  const models = await freeChain(body.models ?? []);
+  const { chain: models, skipped } = await freeChain(body.models ?? []);
   const usesTools = await chainUsesTools(models);
   const headerKey = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
-  const apiKey = body.apiKey?.trim() || headerKey || undefined;
+  // The reader's own key, opened from the seal the browser sent.
+  const { key: own, error: keyError } = await readerKey(body);
+  if (keyError) return Response.json({ error: keyError }, { status: 400 });
+  const apiKey = own || headerKey || undefined;
   // No key of their own: a few cents of answers a day on the shared key, then they bring one.
   let free: Awaited<ReturnType<typeof checkFree>> | null = null;
   if (!apiKey) {
@@ -64,6 +73,8 @@ export async function POST(req: Request) {
   const offerTool = !forced && usesTools && searchEnabled() && body.search !== false;
   const latest = [...history].reverse().find((m) => m.role === "user")?.content;
   const length = isLengthKey(body.length) ? body.length : "normal";
+  // The answer is written in the language the reader is reading in.
+  const locale = localeOfRequest(req, body.locale);
   const maxTokens = body.length === "long" ? 1400 : 900;
 
   const encoder = new TextEncoder();
@@ -91,7 +102,7 @@ export async function POST(req: Request) {
       /** Streams one model call to the browser, keeping usage and done for the end; returns a tool call if it made one. */
       const relay = async (messages: ChatMessage[], tools: "offer" | "answer" | "none") => {
         let call: Extract<StreamEvent, { type: "tool" }> | null = null;
-        for await (const ev of streamChat({ messages, models, apiKey, maxTokens, signal: req.signal, ...(tools !== "none" ? { tools: [WEB_TOOL], toolChoice: tools === "offer" ? "auto" : "none" } : {}) })) {
+        for await (const ev of streamChat({ messages, models, apiKey, maxTokens, signal: req.signal, skipped, ...(tools !== "none" ? { tools: [WEB_TOOL], toolChoice: tools === "offer" ? "auto" : "none" } : {}) })) {
           if (ev.type === "tool") call = ev;
           else if (ev.type === "usage") add(ev.usage);
           else if (ev.type !== "done") controller.enqueue(send(ev));
@@ -104,7 +115,7 @@ export async function POST(req: Request) {
           const found = await search(searchQuery(thread, latest));
           if (found) web = webBlock(found.sources, found.excerpts);
         }
-        const messages = buildMessages(doc, thread, history, length, web, offerTool);
+        const messages = buildMessages(doc, thread, history, length, locale, web, offerTool);
         const call = await relay(messages, offerTool ? "offer" : "none");
         if (call) {
           // Anything written before the call ("Let me look that up") gives way to the real answer.

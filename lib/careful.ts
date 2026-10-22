@@ -9,6 +9,7 @@
 import { markdownBlocks, wordCount, type Article } from "./article";
 import { readApiKey } from "./ask";
 import { htmlTablesToMarkdown, stitchBlocks } from "./pdf";
+import { sealedKey } from "./seal-client";
 import { loadDoc, loadPdf, useStore } from "./store";
 
 export type CarefulResult = { ok: true; article: Article } | { ok: false; error: string; needKey?: boolean };
@@ -25,10 +26,13 @@ export async function readCarefully(shown: Article, signal?: AbortSignal): Promi
 
   const form = new FormData();
   form.append("file", pdf, "document.pdf");
+  // The reader's key is sealed: it never crosses the network in the clear.
+  const sealed = await sealedKey(key);
+  form.append(sealed.field, sealed.value);
   let j: { pages?: string[]; truncated?: boolean; error?: string; code?: string };
   let status = 0;
   try {
-    const res = await fetch("/api/pdf-careful", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form, signal });
+    const res = await fetch("/api/pdf-careful", { method: "POST", body: form, signal });
     status = res.status;
     j = await res.json();
   } catch (e) {

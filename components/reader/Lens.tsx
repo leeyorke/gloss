@@ -43,7 +43,7 @@ export type OpenHighlight = { id: string; anchor: Anchor; at: number; note?: boo
 
 export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; openHighlight: OpenHighlight | null }) {
   const { ix } = useReader();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [lens, setLens] = useState<LensState | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number; below: boolean; arrow: number; docked: boolean } | null>(null);
   const [draft, setDraft] = useState("");
@@ -291,7 +291,7 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
   if (!lens) return null;
 
   const run = (action: Action, question?: string) => {
-    startGloss(ix, { anchor: lens.anchor, action, question });
+    startGloss(ix, { anchor: lens.anchor, action, question, locale });
     close();
   };
 

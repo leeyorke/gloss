@@ -8,8 +8,8 @@ import { useStore } from "@/lib/store";
 import type { ModelInfo } from "@/lib/models";
 
 const MODELS: ModelInfo[] = [
-  { id: "a/one:free", name: "Model One", context: 1000, tools: true, vision: false, reasoning: false, mandatoryReasoning: false, json: true, inPerM: 0, outPerM: 0 },
-  { id: "b/two:free", name: "Model Two", context: 2000, tools: true, vision: false, reasoning: false, mandatoryReasoning: false, json: true, inPerM: 0, outPerM: 0 },
+  { id: "a/one:free", name: "Model One", context: 1000, tools: true, vision: false, reasoning: false, mandatoryReasoning: false, defaultReasoning: false, efforts: [], json: true, inPerM: 0, outPerM: 0 },
+  { id: "b/two:free", name: "Model Two", context: 2000, tools: true, vision: false, reasoning: false, mandatoryReasoning: false, defaultReasoning: false, efforts: [], json: true, inPerM: 0, outPerM: 0 },
 ];
 
 function draw() {

@@ -17,7 +17,7 @@ import { fmtCost, useReader } from "./context";
  */
 export function Brief() {
   const { ix, jumpTo } = useReader();
-  const { t, formatNumber } = useI18n();
+  const { t, formatNumber, locale } = useI18n();
   const brief = useStore((s) => s.briefs[ix.article.id]);
   const open = useStore((s) => s.briefOpen);
   const setUI = useStore((s) => s.setUI);
@@ -29,7 +29,7 @@ export function Brief() {
     return (
       <button
         type="button"
-        onClick={() => fetchBrief(ix)}
+        onClick={() => fetchBrief(ix, locale)}
         className="group mt-6 flex w-full items-center gap-5 rounded-[16px] border border-rule bg-raised/60 py-4 pl-5 pr-4 text-left transition-[border-color,background-color,transform,box-shadow] duration-200 hover:border-rule-strong hover:bg-raised hover:shadow-card active:scale-[0.995]"
       >
         <span className="min-w-0 flex-1">
@@ -64,7 +64,7 @@ export function Brief() {
             </Show>
           </>
         )}
-        <button type="button" onClick={() => fetchBrief(ix)} className="font-medium text-ink underline decoration-rule-strong underline-offset-4">
+        <button type="button" onClick={() => fetchBrief(ix, locale)} className="font-medium text-ink underline decoration-rule-strong underline-offset-4">
           {t("common.retry")}
         </button>
       </div>
@@ -159,7 +159,7 @@ export function Brief() {
               {modelId ? modelLabel(modelId) : ""}
               {usage ? ` / ${formatNumber(usage.promptTokens)} in, ${formatNumber(usage.completionTokens)} out / ${fmtCost(usage.costUsd)}` : ""}
             </span>
-            <button type="button" onClick={() => fetchBrief(ix)} className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 hover:bg-sunk hover:text-ink">
+            <button type="button" onClick={() => fetchBrief(ix, locale)} className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 hover:bg-sunk hover:text-ink">
               <RotateCcw size={11} /> {t("reader.brief.redo")}
             </button>
           </div>

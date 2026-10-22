@@ -9,6 +9,7 @@
 
 import type { Article } from "./article";
 import { readApiKey } from "./ask";
+import { sealedKey } from "./seal-client";
 import type { Shelving } from "./library";
 import { excerptOf } from "./excerpt";
 import { loadDoc, useStore, type LibraryItem } from "./store";
@@ -23,10 +24,13 @@ export async function shelveText(a: Text): Promise<void> {
   if (resting || inflight.has(a.id)) return;
   inflight.add(a.id);
   try {
+    const own = readApiKey();
+    // The reader's key is sealed: it never crosses the network in the clear.
+    const sealed = own ? await sealedKey(own) : undefined;
     const res = await fetch("/api/shelve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: a.title, author: a.author, source: a.source, dek: a.dek, excerpt: a.blocks ? excerptOf(a.blocks) : undefined, apiKey: readApiKey() || undefined }),
+      body: JSON.stringify({ title: a.title, author: a.author, source: a.source, dek: a.dek, excerpt: a.blocks ? excerptOf(a.blocks) : undefined, ...(sealed ? { [sealed.field]: sealed.value } : {}) }),
     });
     if (res.status === 429 || res.status === 401) {
       const j = (await res.json().catch(() => ({}))) as { code?: string };

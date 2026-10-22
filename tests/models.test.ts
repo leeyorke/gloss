@@ -11,6 +11,8 @@ function model(id: string, over: Partial<ModelInfo> = {}): ModelInfo {
     vision: over.vision ?? false,
     reasoning: over.reasoning ?? false,
     mandatoryReasoning: over.mandatoryReasoning ?? false,
+    defaultReasoning: over.defaultReasoning ?? false,
+    efforts: over.efforts ?? [],
     json: over.json ?? false,
     inPerM: over.inPerM ?? 0,
     outPerM: over.outPerM ?? 0,

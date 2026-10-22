@@ -4,6 +4,8 @@ import type { Action } from "./actions";
 import type { BriefData } from "./article";
 import { modelLabel } from "./catalogue-client";
 import { docPayload, type DocIndex } from "./doc";
+import type { Locale } from "./i18n/config";
+import { sealedKey } from "./seal-client";
 import { uid, useStore, type Anchor, type Gloss, type Turn } from "./store";
 import type { ModelId, StreamEvent, Usage } from "./models";
 
@@ -36,7 +38,7 @@ function lastAssistant(g: Gloss, fn: (t: Turn) => Turn): Gloss {
 }
 
 /** Streams the newest assistant turn of a gloss from /api/ask. */
-async function stream(ix: DocIndex, glossId: string, models: ModelId[]) {
+async function stream(ix: DocIndex, glossId: string, models: ModelId[], locale: Locale) {
   const st = useStore.getState();
   const articleId = ix.article.id;
   const g = (st.glosses[articleId] ?? []).find((x) => x.id === glossId);
@@ -58,14 +60,18 @@ async function stream(ix: DocIndex, glossId: string, models: ModelId[]) {
 
   try {
     const apiKey = readApiKey();
+    // The reader's key is sealed: it never crosses the network in the clear.
+    const sealed = apiKey ? await sealedKey(apiKey) : undefined;
     const res = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: ctrl.signal,
       body: JSON.stringify({
-        apiKey: apiKey || undefined,
+        ...(sealed ? { [sealed.field]: sealed.value } : {}),
         models,
         length: st.settings.length,
+        // The answer is written in the language the reader is reading in.
+        locale,
         doc: docPayload(ix, g.anchor?.start.b ?? g.at),
         thread: { action: g.action, quote: g.anchor?.quote, from, to, at, question: g.question },
         history,
@@ -108,7 +114,7 @@ async function stream(ix: DocIndex, glossId: string, models: ModelId[]) {
           // Batch tokens into animation frames so a fast model never janks the page.
           pending += e.text;
           if (!raf) raf = requestAnimationFrame(flush);
-        } else if (e.type === "meta") update((t) => ({ ...t, model: e.model, modelId: e.modelId }));
+        } else if (e.type === "meta") update((t) => ({ ...t, model: e.model, modelId: e.modelId, skipped: e.skipped }));
         else if (e.type === "reset") {
           // A line written before a web search ("Let me look that up") gives way to the answer.
           pending = "";
@@ -135,7 +141,7 @@ async function stream(ix: DocIndex, glossId: string, models: ModelId[]) {
 
 export function startGloss(
   ix: DocIndex,
-  opts: { anchor?: Anchor; at?: string; action: Action; question?: string; models?: ModelId[] }
+  opts: { anchor?: Anchor; at?: string; action: Action; question?: string; models?: ModelId[]; locale: Locale }
 ): string {
   const st = useStore.getState();
   const models = opts.models ?? st.settings.models;
@@ -152,11 +158,11 @@ export function startGloss(
     turns: [{ role: "assistant", content: "", streaming: true, modelId: models[0], model: models[0] ? modelLabel(models[0]) : "" }],
   };
   st.addGloss(g);
-  void stream(ix, g.id, models);
+  void stream(ix, g.id, models, opts.locale);
   return g.id;
 }
 
-export function followUp(ix: DocIndex, glossId: string, question: string, models?: ModelId[]) {
+export function followUp(ix: DocIndex, glossId: string, question: string, locale: Locale, models?: ModelId[]) {
   const st = useStore.getState();
   const chain = models ?? st.settings.models;
   st.updateGloss(ix.article.id, glossId, (g) => ({
@@ -167,30 +173,31 @@ export function followUp(ix: DocIndex, glossId: string, question: string, models
       { role: "assistant", content: "", streaming: true, modelId: chain[0], model: chain[0] ? modelLabel(chain[0]) : "" },
     ],
   }));
-  void stream(ix, glossId, chain);
+  void stream(ix, glossId, chain, locale);
 }
 
 /** Re-runs the latest answer, on the same models. */
-export function retry(ix: DocIndex, glossId: string, models?: ModelId[]) {
+export function retry(ix: DocIndex, glossId: string, locale: Locale, models?: ModelId[]) {
   const st = useStore.getState();
   const chain = models ?? st.settings.models;
   st.updateGloss(ix.article.id, glossId, (g) =>
     lastAssistant(g, () => ({ role: "assistant", content: "", streaming: true, modelId: chain[0], model: chain[0] ? modelLabel(chain[0]) : "" }))
   );
-  void stream(ix, glossId, chain);
+  void stream(ix, glossId, chain, locale);
 }
 
-export async function fetchBrief(ix: DocIndex) {
+export async function fetchBrief(ix: DocIndex, locale: Locale) {
   const st = useStore.getState();
   const id = ix.article.id;
   const models = st.settings.models;
   st.setBrief(id, { status: "loading" });
   try {
     const apiKey = readApiKey();
+    const sealed = apiKey ? await sealedKey(apiKey) : undefined;
     const res = await fetch("/api/brief", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: apiKey || undefined, models, doc: docPayload(ix) }),
+      body: JSON.stringify({ ...(sealed ? { [sealed.field]: sealed.value } : {}), models, locale, doc: docPayload(ix) }),
     });
     noteFree(res);
     const j = (await res.json()) as { brief?: BriefData; usage?: Usage; modelId?: string; error?: string; code?: string };
@@ -224,7 +231,8 @@ export function openKeyMenu() {
 
 export async function validateKey(key: string): Promise<boolean> {
   try {
-    const res = await fetch("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: key }) });
+    const sealed = await sealedKey(key);
+    const res = await fetch("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [sealed.field]: sealed.value }) });
     return ((await res.json()) as { ok?: boolean }).ok === true;
   } catch {
     return false;
@@ -243,11 +251,12 @@ export async function streamAsk(
   let full = "";
   try {
     const apiKey = readApiKey();
+    const sealed = apiKey ? await sealedKey(apiKey) : undefined;
     const res = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
-      body: JSON.stringify({ ...body, apiKey: apiKey || undefined, models: useStore.getState().settings.models }),
+      body: JSON.stringify({ ...body, ...(sealed ? { [sealed.field]: sealed.value } : {}), models: useStore.getState().settings.models }),
     });
     noteFree(res);
     if (!res.ok || !res.body) {

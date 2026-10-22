@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { Action } from "./actions";
 import type { Article, BriefData } from "./article";
-import type { ModelId, Source, Usage } from "./models";
+import type { ModelId, SkippedModel, Source, Usage } from "./models";
 import { DEFAULT_SETTINGS, SETTINGS_KEY, type Marker, type Settings } from "./settings";
 
 /** A point in the text: block id and a character offset into its plain text. */
@@ -17,6 +17,8 @@ export type Turn = {
   model?: string;
   /** The model that answered, by its id. */
   modelId?: ModelId;
+  /** The models the reader chose that could not answer, and why they were passed over. */
+  skipped?: SkippedModel[];
   /** The reader needs their own key to continue: free answers are spent, or there is no shared key. */
   needKey?: boolean;
   /** Looking things up on the web before the answer starts. */

@@ -1,4 +1,5 @@
 import type { Action } from "./actions";
+import { DEFAULT_LOCALE, type Locale } from "./i18n/config";
 import type { ChatMessage } from "./models";
 
 export type DocPayload = {
@@ -94,11 +95,39 @@ export const isLengthKey = (v: unknown): v is LengthKey => typeof v === "string"
 /** When web_search is offered: when to use it, and how. After the text, so the cached prefix is unchanged. */
 const TOOL_NOTE = `You can call web_search. Use it when the question turns on something the text does not explain: a specific person, organisation, place, work or event named in the selection, or anything that may have changed since the text was written. Do not use it for what the text says or for plain word meanings. If you use it, call it straight away, with no words before the call. Cite what a result says as [1], [2] and keep [¶n] for the text.`;
 
+/* ---------------- the language of the answer ---------------- */
+
+/** The language an answer is written in, for each language Gloss speaks. */
+const ANSWER_LANGUAGE: Record<Locale, string> = {
+  en: "English",
+  zh: "Simplified Chinese (简体中文)",
+};
+
+/**
+ * The instruction that puts a gloss in the reader's language.
+ *
+ * The prompt itself stays in English, so one set of words serves every reader
+ * and the cached prefix is the same for all of them. Only the language of the
+ * answer is added, and it goes after the text, so the document keeps its place
+ * at the front of the messages and the cache still serves the follow-ups.
+ */
+export function languageNote(locale: Locale): string {
+  const name = ANSWER_LANGUAGE[locale];
+  return `Write the answer in ${name}: the reader is reading Gloss in ${name}, so the answer is written in it. Everything else keeps its shape: the key answer stays wrapped in ==double equals==, the paragraph citations stay as [¶n], the web results stay as [1], and any words quoted from the text stay in the language of the text.`;
+}
+
+/** The same, for the brief: it has titles to write rather than a marked key answer. */
+export function briefLanguageNote(locale: Locale): string {
+  const name = ANSWER_LANGUAGE[locale];
+  return `Write the gist, the claims, the caveats and the section titles in ${name}: the reader is reading Gloss in ${name}, so the brief is written in it. The JSON shape, the citation numbers and the rule that a section title is two to five words stay as they are.`;
+}
+
 export function buildMessages(
   doc: DocPayload,
   thread: ThreadPayload,
   history: { role: "user" | "assistant"; content: string }[] = [],
   length: LengthKey = "normal",
+  locale: Locale = DEFAULT_LOCALE,
   web?: string,
   tool = false
 ): ChatMessage[] {
@@ -108,6 +137,8 @@ export function buildMessages(
     { role: "system", content: LENGTHS[length] },
     ...(web ? [{ role: "system" as const, content: web }] : []),
     ...(tool ? [{ role: "system" as const, content: TOOL_NOTE }] : []),
+    // Last of the instructions, so it is the one nearest the answer.
+    { role: "system", content: languageNote(locale) },
     { role: "user", content: firstTurn(thread) },
     ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
@@ -143,3 +174,15 @@ Rules:
 - 1 to 3 caveats: what a careful reader should keep in mind before relying on this text. Look for the limits of its scope (which data, models, settings, people or cases it covers, and what it never tests), its standing (a preprint not yet peer reviewed, an opinion piece, a single study), what the author concedes, and any place its headline goes beyond its own evidence. Each caveat must be true of this text and cite the paragraph that shows it, or 0 when it is about something the text leaves out. An empty list only when nothing applies.
 - 4 to 8 sections that cover the text in order: "start" is the first paragraph number of each section, ascending, and the first section starts at the first paragraph. Section titles are sentence case and specific to this text.
 - Never use em dashes or en dashes.`;
+
+/**
+ * The brief, as the model sees it: the text, the language to write in, and the
+ * shape of the answer. The document keeps its place at the front.
+ */
+export function briefMessages(doc: DocPayload, locale: Locale = DEFAULT_LOCALE): ChatMessage[] {
+  return [
+    { role: "system", content: systemFor(doc) },
+    { role: "system", content: briefLanguageNote(locale) },
+    { role: "user", content: BRIEF_TASK },
+  ];
+}

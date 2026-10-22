@@ -1,13 +1,15 @@
-import { BRIEF_TASK, systemFor, type DocPayload } from "@/lib/prompts";
+import { briefMessages, type DocPayload } from "@/lib/prompts";
 import { completeJSON, freeChain, modelInfo } from "@/lib/openrouter";
 import { undash, type BriefData } from "@/lib/article";
 import { chargeFree, checkFree, estimateUsd, needKey } from "@/lib/quota";
+import { localeOfRequest } from "@/lib/i18n/request";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { apiKey?: string; models?: string[]; doc?: DocPayload };
+  let body: { apiKey?: string; key?: string; models?: string[]; doc?: DocPayload; locale?: string };
   try {
     body = await req.json();
   } catch {
@@ -17,8 +19,13 @@ export async function POST(req: Request) {
   if (!doc?.title || !Array.isArray(doc.paras) || doc.paras.length === 0) {
     return Response.json({ error: "doc is required." }, { status: 400 });
   }
+  // The brief is written in the language the reader is reading in.
+  const locale = localeOfRequest(req, body.locale);
 
-  const apiKey = body.apiKey?.trim() || undefined;
+  // The reader's own key, opened from the seal the browser sent.
+  const { key: own, error: keyError } = await readerKey(body);
+  if (keyError) return Response.json({ error: keyError }, { status: 400 });
+  const apiKey = own || undefined;
   // A gloss of the whole text spends from the same free allowance.
   let free: Awaited<ReturnType<typeof checkFree>> | null = null;
   if (!apiKey) {
@@ -27,20 +34,18 @@ export async function POST(req: Request) {
     if (!free.ok) return needKey(free);
   }
 
-  const models = await freeChain(body.models ?? []);
+  const { chain: models, skipped } = await freeChain(body.models ?? []);
   const result = await completeJSON<BriefData>({
     models,
     apiKey,
     signal: req.signal,
+    skipped,
     // Thinking first: checking a text's headline figures against its own tables is arithmetic, and without it the
     // model repeats the abstract. About 10 s instead of 3 on a 14k-token paper, and half a cent more. The thinking
     // spends from max_tokens (up to 7k on that paper), so the budget is generous.
     thinking: true,
     maxTokens: 16000,
-    messages: [
-      { role: "system", content: systemFor(doc) },
-      { role: "user", content: BRIEF_TASK },
-    ],
+    messages: briefMessages(doc, locale),
   });
   if (free) {
     const chars = doc.paras.reduce((a, p) => a + (p.text?.length ?? 0), 0);

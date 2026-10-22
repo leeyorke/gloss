@@ -30,11 +30,20 @@ type Props = {
 
 function Receipt({ t: turn }: { t: Turn }) {
   const { t, formatNumber } = useI18n();
-  if (!turn.usage) return <span>{turn.model}</span>;
+  // The models the reader chose that could not answer: this answer came from
+  // another one, and they are told which, and why.
+  const skipped = turn.skipped ?? [];
+  const why = skipped.map((s) => `${s.model}: ${s.reason}`).join(" · ");
+  const model = (
+    <span data-tip={turn.model} data-tip-hint={why || undefined}>
+      {turn.model}
+    </span>
+  );
+  if (!turn.usage) return model;
   const u = turn.usage;
   return (
     <span data-tip={t("reader.gloss.receipt", { prompt: formatNumber(u.promptTokens), cached: formatNumber(u.cachedTokens), written: formatNumber(u.completionTokens) })}>
-      {turn.model}
+      {model}
       <span className="mx-1.5 text-ink-4/70">/</span>
       {fmtTokens(u.promptTokens)} in{u.cachedTokens > 0 ? ` (${Math.round((u.cachedTokens / Math.max(1, u.promptTokens)) * 100)}% cached)` : ""}, {u.completionTokens} out
       <span className="mx-1.5 text-ink-4/70">/</span>
@@ -106,7 +115,7 @@ function TurnBody({ t }: { t: Turn }) {
 
 export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ gloss, active, hover, entering, mini = false, variant, top, fresh = false, onActivate }, ref) {
   const { ix, jumpToBlock } = useReader();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const removeGloss = useStore((s) => s.removeGloss);
   const setUI = useStore((s) => s.setUI);
   const [draft, setDraft] = useState("");
@@ -132,7 +141,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
   const submit = () => {
     const q = draft.trim();
     if (!q || busy) return;
-    followUp(ix, gloss.id, q);
+    followUp(ix, gloss.id, q, locale);
     setDraft("");
   };
 
@@ -277,7 +286,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
               </IconBtn>
             ) : (
               <>
-                <IconBtn label={t("common.retry")} onClick={() => retry(ix, gloss.id)}>
+                <IconBtn label={t("common.retry")} onClick={() => retry(ix, gloss.id, locale)}>
                   <RotateCcw size={14} />
                 </IconBtn>
                 <IconBtn label={copied ? t("reader.gloss.copied") : t("reader.gloss.copy")} onClick={copy}>

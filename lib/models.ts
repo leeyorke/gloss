@@ -26,6 +26,10 @@ export type ModelInfo = {
   reasoning: boolean;
   /** Whether it has to: a model that always thinks spends its budget thinking. */
   mandatoryReasoning: boolean;
+  /** Whether it thinks unless it is told not to. */
+  defaultReasoning: boolean;
+  /** How hard it can think, dearest first: "max", "high", "medium", "low", "minimal", "none". */
+  efforts: string[];
   /** Whether it answers in JSON when it is asked to. */
   json: boolean;
   /** Dollars a million tokens: prompt in, completion out. A free model is 0. */
@@ -50,8 +54,15 @@ export type Usage = {
 /** A web result an answer can cite as [n]. */
 export type Source = { n: number; title: string; url: string; site: string; date?: string };
 
+/**
+ * A model that was passed over: the reader asked for it, and it could not
+ * answer. The reader is told, because the answer they got came from a model
+ * they did not choose.
+ */
+export type SkippedModel = { model: string; reason: string };
+
 export type StreamEvent =
-  | { type: "meta"; model: string; modelId?: string }
+  | { type: "meta"; model: string; modelId?: string; /** The models asked first, and why each could not answer. */ skipped?: SkippedModel[] }
   | { type: "searching" }
   /** The model asked for a tool (web search); the route runs it and asks again. Never sent to the browser. */
   | { type: "tool"; id: string; name: string; args: string }

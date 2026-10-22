@@ -1,5 +1,6 @@
 import { chargeFree, checkFree, needKey } from "@/lib/quota";
 import { OPENROUTER_URL, modelInfo, openrouterHeaders, visionModel } from "@/lib/openrouter";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -41,7 +42,7 @@ function clean(md: string): string {
 }
 
 export async function POST(req: Request) {
-  let body: { image?: string; apiKey?: string; mode?: string };
+  let body: { image?: string; apiKey?: string; key?: string; mode?: string };
   try {
     body = await req.json();
   } catch {
@@ -52,7 +53,10 @@ export async function POST(req: Request) {
   if (image.length > MAX_IMAGE_CHARS) return Response.json({ error: "That page image is too large." }, { status: 413 });
 
   const headerKey = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
-  const own = body.apiKey?.trim() || headerKey || undefined;
+  // The reader's own key, opened from the seal the browser sent.
+  const { key: sealed, error: keyError } = await readerKey(body);
+  if (keyError) return Response.json({ error: keyError }, { status: 400 });
+  const own = sealed || headerKey || undefined;
   let free: Awaited<ReturnType<typeof checkFree>> | null = null;
   if (!own) {
     if (!process.env.OPENROUTER_API_KEY) return needKey(null);

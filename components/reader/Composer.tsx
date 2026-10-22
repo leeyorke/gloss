@@ -18,7 +18,7 @@ export const Composer = forwardRef<ComposerHandle, { currentBlock: () => string 
   ref
 ) {
   const { ix } = useReader();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [q, setQ] = useState("");
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +30,7 @@ export const Composer = forwardRef<ComposerHandle, { currentBlock: () => string 
   const ask = (question: string) => {
     const text = question.trim();
     if (!text) return;
-    startGloss(ix, { at: currentBlock() ?? undefined, action: "ask", question: text });
+    startGloss(ix, { at: currentBlock() ?? undefined, action: "ask", question: text, locale });
     setQ("");
     inputRef.current?.blur();
   };

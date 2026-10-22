@@ -10,7 +10,7 @@
  *    ones behind it are only asked when the one before cannot.
  */
 
-import { costFor, isFree, prettyModel, seedChain, type ChatMessage, type ModelInfo, type StreamEvent, type Usage } from "./models";
+import { costFor, isFree, prettyModel, seedChain, type ChatMessage, type ModelInfo, type SkippedModel, type StreamEvent, type Usage } from "./models";
 
 export type { ChatMessage, ModelInfo, StreamEvent, Usage } from "./models";
 
@@ -50,7 +50,7 @@ type Entry = {
   architecture?: { input_modalities?: string[]; output_modalities?: string[] };
   pricing?: { prompt?: string; completion?: string };
   supported_parameters?: string[];
-  reasoning?: { mandatory?: boolean };
+  reasoning?: { mandatory?: boolean; default_enabled?: boolean; supported_efforts?: unknown[] };
 };
 
 let cached: { at: number; models: ModelInfo[] } | null = null;
@@ -104,6 +104,8 @@ function toModel(e: Entry): ModelInfo | null {
     vision: input.includes("image"),
     reasoning: params.includes("reasoning"),
     mandatoryReasoning: Boolean(e.reasoning?.mandatory),
+    defaultReasoning: Boolean(e.reasoning?.default_enabled),
+    efforts: Array.isArray(e.reasoning?.supported_efforts) ? e.reasoning.supported_efforts.filter((x): x is string => typeof x === "string") : [],
     json: params.includes("response_format") || params.includes("structured_outputs"),
     inPerM: Number.isFinite(inPerM) ? inPerM : 0,
     outPerM: Number.isFinite(outPerM) ? outPerM : 0,
@@ -140,18 +142,22 @@ export async function recommendedChain(): Promise<string[]> {
 /**
  * The chain to try, from what the reader asked for. Only free models are let
  * through: the shared key pays for the answers, and a paid model on it would
- * be paid for out of the owner's pocket.
+ * be paid for out of the owner's pocket. The ones left out are named, so the
+ * reader is not left wondering why their choice was not the one that answered.
  */
-export async function freeChain(ids: string[]): Promise<string[]> {
+export async function freeChain(ids: string[]): Promise<{ chain: string[]; skipped: SkippedModel[] }> {
   const wanted = (ids ?? []).filter((id) => typeof id === "string" && id).slice(0, 10);
   const models = await catalogue();
   if (!models.length) {
     // No catalogue to check against: only ids that say they are free get through.
-    return wanted.filter((id) => id.endsWith(":free"));
+    return { chain: wanted.filter((id) => id.endsWith(":free")), skipped: [] };
   }
   const free = new Set(models.filter(isFree).map((m) => m.id));
   const chain = wanted.filter((id) => free.has(id));
-  return chain.length ? chain : await recommendedChain();
+  const skipped: SkippedModel[] = wanted
+    .filter((id) => !free.has(id))
+    .map((id) => ({ model: models.find((m) => m.id === id)?.name ?? prettyModel(id), reason: "It is not on the free list, so it is never asked." }));
+  return chain.length ? { chain, skipped } : { chain: await recommendedChain(), skipped: [] };
 }
 
 /** Whether the first model in the chain can call tools. */
@@ -212,11 +218,23 @@ type Chunk = {
 };
 
 /**
+ * Why no model in the chain answered: each one that was asked, and what it said.
+ */
+function chainFailure(failures: SkippedModel[]): string {
+  if (!failures.length) return "No model in the chain answered.";
+  return `No model in the chain answered. ${failures.map((f) => `${f.model}: ${f.reason}`).join(" ")}`;
+}
+
+/**
  * One answer, from the first model in the chain that can give one.
  *
  * The models behind the first are only asked when the one before could not
- * answer at all: it was rate limited, it is gone from the list, it answered
- * only in its reasoning. A model that starts answering is left to finish.
+ * answer at all: it was rate limited, it is gone from the list, it thought out
+ * loud and said nothing. A model that starts answering is left to finish.
+ *
+ * Every model that is passed over is remembered, and the reader is told: the
+ * answer they get may come from a model they did not choose, and they are
+ * entitled to know why their choice was not the one that answered.
  */
 export async function* streamChat(req: {
   messages: ChatMessage[];
@@ -230,6 +248,8 @@ export async function* streamChat(req: {
   tools?: readonly unknown[];
   /** "none" sends the tools (a conversation that already used one needs them) but asks for an answer. */
   toolChoice?: "auto" | "none";
+  /** The models that are never asked at all, and why. */
+  skipped?: SkippedModel[];
 }): AsyncGenerator<StreamEvent> {
   const apiKey = req.apiKey?.trim() || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -242,31 +262,33 @@ export async function* streamChat(req: {
     return;
   }
 
-  let last = "No model in the chain answered.";
+  const failures: SkippedModel[] = [...(req.skipped ?? [])];
   for (const id of chain) {
     const label = await labelFor(id);
-    let answered = false;
+    let said = false;
     let failure: string | null = null;
     for await (const a of streamOne({ ...req, model: id, apiKey })) {
       if (a.kind === "failed") {
         failure = a.error;
         break;
       }
-      if (!answered) {
-        answered = true;
-        yield { type: "meta", model: label, modelId: id };
+      // Only an answer claims the model. A model that sends its usage and
+      // nothing else has not answered, and the chain carries on to the next.
+      if (!said && (a.event.type === "content" || a.event.type === "tool")) {
+        said = true;
+        yield { type: "meta", model: label, modelId: id, skipped: failures.length ? [...failures] : undefined };
       }
       yield a.event;
     }
+    if (failure) failures.push({ model: label, reason: failure });
     // It failed after it had started answering: the reader has half an answer.
-    if (failure && answered) {
-      yield { type: "error", text: failure };
+    if (failure && said) {
+      yield { type: "error", text: `${label}: ${failure}` };
       return;
     }
-    if (answered) return;
-    last = failure ?? last;
+    if (said) return;
   }
-  yield { type: "error", text: last };
+  yield { type: "error", text: chainFailure(failures) };
 }
 
 async function* streamOne(req: {
@@ -282,6 +304,8 @@ async function* streamOne(req: {
   const info = await modelInfo(req.model);
   // A model that cannot call tools is not offered them.
   const tools = req.tools && (info ? info.tools : true) ? req.tools : undefined;
+  // How much the model may think, so the answer has room in the budget.
+  const reasoning = reasoningFor(info);
 
   let res: Response;
   try {
@@ -295,6 +319,7 @@ async function* streamOne(req: {
         stream_options: { include_usage: true },
         temperature: req.temperature ?? 0.4,
         max_tokens: req.maxTokens ?? 900,
+        ...(reasoning ? { reasoning } : {}),
         ...(tools ? { tools, tool_choice: req.toolChoice ?? "auto" } : {}),
         messages: req.messages,
       }),
@@ -371,10 +396,30 @@ async function* streamOne(req: {
     return;
   }
   if (!sawContent && sawReasoning) {
-    yield { kind: "failed", error: `${info?.name ?? prettyModel(req.model)} answered only in its reasoning.`, retryable: true };
+    // The model thought for the whole budget and wrote nothing.
+    yield { kind: "failed", error: "It used the whole budget thinking and wrote nothing.", retryable: true };
     return;
   }
   yield { kind: "event", event: { type: "done" } };
+}
+
+/**
+ * How much a model is allowed to think.
+ *
+ * Reasoning tokens come out of the same budget as the answer, and most
+ * models think by default: OpenRouter reports the ones that do, and how hard.
+ * A model left to itself spends four fifths of the budget on thinking, and
+ * the answer has nothing left. A gloss is two or three sentences: the model
+ * is told to think only where it has to, and as little as it can.
+ */
+function reasoningFor(info: ModelInfo | undefined, want?: boolean): { effort?: string; enabled?: boolean } | undefined {
+  if (!info?.reasoning) return undefined; // the model does not think
+  if (want) return { enabled: true }; // the caller asked for thinking: the brief does
+  const efforts = info.efforts;
+  if (efforts.includes("none")) return { effort: "none" }; // it can answer without thinking
+  if (efforts.length) return { effort: efforts[efforts.length - 1] }; // the cheapest it has
+  // Nothing to choose between: a model that thinks by default is asked to think as little as it can.
+  return info.defaultReasoning ? { effort: "low" } : undefined;
 }
 
 /** Non-streaming JSON completion, for structured output like the brief. */
@@ -387,21 +432,25 @@ export async function completeJSON<T>(req: {
   signal?: AbortSignal;
   /** Let the model reason before it answers, for checking a text against itself. Its thinking spends from maxTokens. */
   thinking?: boolean;
+  /** The models that are never asked at all, and why. */
+  skipped?: SkippedModel[];
 }): Promise<{ ok: true; data: T; usage: Usage; model: string; modelId: string } | { ok: false; error: string }> {
   const apiKey = req.apiKey?.trim() || process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { ok: false, error: "No OpenRouter API key. Set OPENROUTER_API_KEY, or add your own key." };
   const chain = req.models?.length ? req.models : await recommendedChain();
   if (!chain.length) return { ok: false, error: "OpenRouter's free models could not be listed. Try again in a moment." };
 
-  let last = "No model in the chain answered.";
+  // Every model that is passed over is named, so the reader knows why the
+  // answer did not come from the one they chose.
+  const failures: SkippedModel[] = [...(req.skipped ?? [])];
   for (const id of chain) {
     const r = await completeOne<T>({ ...req, model: id, apiKey });
     if (r.ok) return r;
-    last = r.error;
+    failures.push({ model: await labelFor(id), reason: r.error });
     // A key that is refused, or a request that is wrong, will fail the same way for every model.
     if (!r.retryable) break;
   }
-  return { ok: false, error: last };
+  return { ok: false, error: chainFailure(failures) };
 }
 
 async function completeOne<T>(req: {
@@ -413,6 +462,8 @@ async function completeOne<T>(req: {
   thinking?: boolean;
 }): Promise<{ ok: true; data: T; usage: Usage; model: string; modelId: string } | { ok: false; error: string; retryable: boolean }> {
   const info = await modelInfo(req.model);
+  // The brief asks for thinking; everything else wants the answer, not the thinking.
+  const reasoning = reasoningFor(info, req.thinking);
   let res: Response;
   try {
     res = await fetch(OPENROUTER_URL, {
@@ -424,7 +475,7 @@ async function completeOne<T>(req: {
         temperature: 0.3,
         max_tokens: req.maxTokens ?? 1400,
         ...(info?.json ? { response_format: { type: "json_object" } } : {}),
-        ...(info?.reasoning && req.thinking ? { reasoning: { enabled: true } } : {}),
+        ...(reasoning ? { reasoning } : {}),
         messages: req.messages,
       }),
     });

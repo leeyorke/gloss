@@ -20,6 +20,7 @@
 import { blockText, markdownBlocks, modelText, wordCount, type Article, type Block } from "./article";
 import { readApiKey } from "./ask";
 import { htmlTablesToMarkdown, renderPages } from "./pdf";
+import { sealedKey } from "./seal-client";
 import { loadDoc, loadPdf, saveDoc, useStore } from "./store";
 
 const AT_ONCE = 4;
@@ -104,7 +105,9 @@ export function startUpgrade(id: string, listener: (p: UpgradeProgress) => void)
       // Another device has the text but not the file: nothing to read from.
       if (!pdf) return;
       const bytes = new Uint8Array(await pdf.arrayBuffer());
-      const apiKey = readApiKey() || undefined;
+      const own = readApiKey();
+      // The reader's key is sealed: it never crosses the network in the clear.
+      const sealed = own ? await sealedKey(own) : undefined;
       total = pending.length;
       onProgress({ done, total, active: true });
 
@@ -120,7 +123,7 @@ export function startUpgrade(id: string, listener: (p: UpgradeProgress) => void)
               const res = await fetch("/api/pdf-page", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: s.image, apiKey, mode: "layout" }),
+                body: JSON.stringify({ image: s.image, ...(sealed ? { [sealed.field]: sealed.value } : {}), mode: "layout" }),
               });
               const j = (await res.json()) as { markdown?: string; code?: string };
               return { page: s.pageNum, markdown: j.markdown, spent: j.code === "need_key" };

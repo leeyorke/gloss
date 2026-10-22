@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { parseCarefully, type Tier } from "@/lib/llamaparse";
 import { KEY_URL, openrouterHeaders } from "@/lib/openrouter";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -61,18 +62,26 @@ async function record(subject: string, pages: number, usd: number) {
 }
 
 export async function POST(req: Request) {
-  const key = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
-  if (!key) return Response.json({ error: "Reading carefully needs your OpenRouter key. Add it from the key button.", code: "need_key" }, { status: 401 });
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES + 10_000) return tooLarge();
 
   let file: File | null = null;
+  let own: string | undefined;
   try {
     const form = await req.formData();
     const f = form.get("file");
     file = f instanceof File ? f : null;
+    // The reader's own key comes sealed, so it is never in the request in the clear.
+    const sealed = String(form.get("key") ?? "");
+    const plain = String(form.get("apiKey") ?? "");
+    const { key, error } = await readerKey({ key: sealed || undefined, apiKey: plain || undefined });
+    if (error) return Response.json({ error }, { status: 400 });
+    own = key;
   } catch {}
   if (!file) return Response.json({ error: "Send the PDF as a file." }, { status: 400 });
   if (file.size > MAX_BYTES) return tooLarge();
+
+  const key = own?.trim();
+  if (!key) return Response.json({ error: "Reading carefully needs your OpenRouter key. Add it from the key button.", code: "need_key" }, { status: 401 });
 
   if (!(await openrouterKeyWorks(key))) return Response.json({ error: "OpenRouter did not accept your key. Check it in the key menu.", code: "need_key" }, { status: 401 });
 

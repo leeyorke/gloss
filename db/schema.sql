@@ -97,3 +97,13 @@ create table if not exists agent_tokens (
 );
 
 create index if not exists agent_tokens_user on agent_tokens (user_id);
+
+-- The secret that seals a reader's OpenRouter key for the trip from their
+-- browser. One row: every instance of the app reads it, so a seal made for
+-- one instance can be opened by any of them. Set API_KEY_SECRET instead and
+-- this table is not used.
+create table if not exists secrets (
+  name text primary key,
+  value text not null,
+  created_at timestamptz not null default now()
+);

@@ -109,7 +109,7 @@ const GUTTER_WIDE = 64;
 const GUTTER_MID = 52;
 
 function ReaderInner({ article }: { article: Article }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const ix = useMemo(() => indexArticle(article), [article]);
   const articleId = article.id;
   const [articleEl, setArticleEl] = useState<HTMLDivElement | null>(null);
@@ -431,7 +431,7 @@ function ReaderInner({ article }: { article: Article }) {
         case "b":
         case "B": {
           const b = st.briefs[articleId];
-          if (!b || b.status === "error") fetchBrief(ix);
+          if (!b || b.status === "error") fetchBrief(ix, locale);
           else setUI({ briefOpen: !st.briefOpen });
           if (window.scrollY > 400) window.scrollTo({ top: 0, behavior: "smooth" });
           break;
@@ -467,7 +467,7 @@ function ReaderInner({ article }: { article: Article }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [article.blocks, articleId, ix, jumpToBlock, setUI]);
+  }, [article.blocks, articleId, ix, jumpToBlock, setUI, locale]);
 
   /* ---------------- layout ---------------- */
 

@@ -9,6 +9,7 @@
 
 import { readApiKey } from "./ask";
 import { isTopic } from "./library";
+import { sealedKey } from "./seal-client";
 import { useStore, type LibraryItem } from "./store";
 
 const DB = "gloss-covers";
@@ -65,10 +66,13 @@ export const forgetCover = (id: string) => tx("readwrite", (s) => s.delete(id));
 export async function paint(item: LibraryItem): Promise<"ok" | "rest" | "error"> {
   if (!item.scene || !isTopic(item.topic)) return "error";
   try {
+    const own = readApiKey();
+    // The reader's key is sealed: it never crosses the network in the clear.
+    const sealed = own ? await sealedKey(own) : undefined;
     const res = await fetch("/api/covers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: item.id, scene: item.scene, topic: item.topic, apiKey: readApiKey() || undefined }),
+      body: JSON.stringify({ id: item.id, scene: item.scene, topic: item.topic, ...(sealed ? { [sealed.field]: sealed.value } : {}) }),
     });
     if (res.status === 429 || res.status === 401) return "rest";
     if (!res.ok) return "error";

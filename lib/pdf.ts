@@ -3,6 +3,7 @@
 import type { LayoutBlock } from "@llamaindex/liteparse-wasm";
 import { inlineMd, markdownBlocks, slugify, tidyTitle, undash, type Article, type Block } from "./article";
 import { readApiKey } from "./ask";
+import { sealedKey } from "./seal-client";
 
 /**
  * PDF to Gloss blocks, in two passes.
@@ -261,7 +262,9 @@ async function pageImage(png: Uint8Array): Promise<string> {
 }
 
 async function readByVision(lp: LP, bytes: Uint8Array, pageNums: number[], into: Map<number, Block[]>, onProgress?: PdfProgress) {
-  const apiKey = readApiKey() || undefined;
+  const own = readApiKey();
+  // The reader's key is sealed: it never crosses the network in the clear.
+  const sealed = own ? await sealedKey(own) : undefined;
   let done = 0;
   let stop: PdfError | null = null;
   const label = () => `Reading ${pageNums.length === 1 ? "a scanned page" : `scanned pages, ${done} of ${pageNums.length}`}`;
@@ -282,7 +285,7 @@ async function readByVision(lp: LP, bytes: Uint8Array, pageNums: number[], into:
           const res = await fetch("/api/pdf-page", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: await pageImage(new Uint8Array(s.imageBytes)), apiKey }),
+            body: JSON.stringify({ image: await pageImage(new Uint8Array(s.imageBytes)), ...(sealed ? { [sealed.field]: sealed.value } : {}) }),
           });
           const j = (await res.json()) as { markdown?: string; error?: string; code?: string };
           if (j.markdown) into.set(s.pageNum, markdownBlocks(htmlTablesToMarkdown(j.markdown)));

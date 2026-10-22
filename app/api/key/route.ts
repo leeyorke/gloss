@@ -1,15 +1,18 @@
 import { peekFree } from "@/lib/quota";
 import { KEY_URL, openrouterHeaders } from "@/lib/openrouter";
+import { readerKey } from "@/lib/seal";
 
 export const runtime = "nodejs";
 
 /** Validates a pasted key against OpenRouter. The key is never stored or logged. */
 export async function POST(req: Request) {
-  let body: { apiKey?: string } = {};
+  let body: { apiKey?: string; key?: string } = {};
   try {
     body = await req.json();
   } catch {}
-  const key = body.apiKey?.trim();
+  // The key comes sealed, so it is never in the request in the clear.
+  const { key, error } = await readerKey(body);
+  if (error) return Response.json({ ok: false, error }, { status: 400 });
   if (!key) return Response.json({ ok: false });
   try {
     const res = await fetch(KEY_URL, {
