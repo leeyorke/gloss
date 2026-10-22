@@ -14,3 +14,10 @@ export const SAMPLE_QUESTIONS: Record<string, string[]> = {
   "on-thinking-for-oneself": ["What is the core argument, in three sentences?", "Is he against reading?", "How would he see the internet?"],
   "walden-reading": ["What is the core argument, in three sentences?", "What does he mean by heroic books?", "Is he being elitist?"],
 };
+
+/** The same questions, as the keys they are written under, so each language can have its own. */
+export const SAMPLE_QUESTION_KEYS: Record<string, string[]> = {
+  "on-a-piece-of-chalk": ["reader.sampleQuestions.on-a-piece-of-chalk.one", "reader.sampleQuestions.on-a-piece-of-chalk.two", "reader.sampleQuestions.on-a-piece-of-chalk.three"],
+  "on-thinking-for-oneself": ["reader.sampleQuestions.on-thinking-for-oneself.one", "reader.sampleQuestions.on-thinking-for-oneself.two", "reader.sampleQuestions.on-thinking-for-oneself.three"],
+  "walden-reading": ["reader.sampleQuestions.walden-reading.one", "reader.sampleQuestions.walden-reading.two", "reader.sampleQuestions.walden-reading.three"],
+};

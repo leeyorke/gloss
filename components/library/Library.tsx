@@ -15,6 +15,8 @@ import { applySettings } from "@/lib/settings";
 import { backfill } from "@/lib/shelving";
 import { useStore } from "@/lib/store";
 import { watchShelf } from "@/lib/sync";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { AddButton, AddPanel, type AddTab } from "./AddPanel";
 import { Arrivals, type Wave } from "./Arrivals";
 import { Glyph } from "./Book";
@@ -37,6 +39,7 @@ const SAMPLES_UNTIL = 6;
  * drop onto the shelf as they arrive.
  */
 export function Library() {
+  const { t, path } = useI18n();
   const router = useRouter();
   const { user, isSignedIn } = useUser();
   const hydrate = useStore((s) => s.hydrate);
@@ -140,7 +143,7 @@ export function Library() {
     const mine: Book[] = library.map((x) => ({
       id: x.id,
       title: tidyTitle(x.title),
-      author: bylineOf(x),
+      author: bylineOf(x, t),
       year: x.year,
       url: x.sourceUrl,
       topic: topicOf(x.topic),
@@ -235,14 +238,14 @@ export function Library() {
   const read = useCallback(
     (b: Book) => {
       setLeaving(true);
-      router.push(`/read/${b.id}`);
+      router.push(path(`/read/${b.id}`));
     },
-    [router]
+    [router, path]
   );
 
   const openBook = open ? books.find((b) => b.id === open.id) ?? null : null;
   const first = user?.firstName;
-  const owner = user?.fullName || first || "A Gloss reader";
+  const owner = user?.fullName || first || t("library.owner.default");
   const T = topic ? TOPIC[topic] : null;
   const topicBooks = useMemo(() => (topic ? books.filter((b) => b.topic === topic).sort((a, b) => b.added - a.added).filter(match) : []), [topic, books, match]);
   const screen = topic ? `topic-${topic}` : view;
@@ -250,9 +253,15 @@ export function Library() {
   const searchBox = (
     <label className="lib-search">
       <Search size={15} className="shrink-0 text-ink-4" aria-hidden />
-      <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={T ? `Search ${T.name}` : "Search the library"} aria-label="Search the library" />
+      <input
+        ref={searchRef}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={T ? t("library.searchTopic", { topic: t(`library.topicNames.${T.key}`) }) : t("library.search")}
+        aria-label={t("library.search")}
+      />
       {q ? (
-        <button type="button" aria-label="Clear search" onClick={() => setQ("")} className="grid size-5 place-items-center rounded-full text-ink-3 hover:bg-sunk">
+        <button type="button" aria-label={t("library.clearSearch")} onClick={() => setQ("")} className="grid size-5 place-items-center rounded-full text-ink-3 hover:bg-sunk">
           <X size={13} />
         </button>
       ) : (
@@ -262,12 +271,12 @@ export function Library() {
   );
 
   const tagChips = (pool: Book[]) =>
-    TAGS.map((t) => {
-      const n = pool.filter(t.test).length;
+    TAGS.map((tagDef) => {
+      const n = pool.filter(tagDef.test).length;
       if (!n) return null;
       return (
-        <Chip key={t.key} on={tag === t.key} onClick={() => setTag(tag === t.key ? null : t.key)}>
-          <Glyph k={t.key} size={18} /> {t.label} <span className="lib-n">{n}</span>
+        <Chip key={tagDef.key} on={tag === tagDef.key} onClick={() => setTag(tag === tagDef.key ? null : tagDef.key)}>
+          <Glyph k={tagDef.key} size={18} /> {t(`library.tags.${tagDef.key}`)} <span className="lib-n">{n}</span>
         </Chip>
       );
     });
@@ -283,30 +292,30 @@ export function Library() {
           <section className="lib-hero">
             <div className="lib-hero-row">
               <div className="min-w-0">
-                <h1 className="lib-title">{first ? `${first}'s library` : "Your library"}</h1>
+                <h1 className="lib-title">{first ? t("library.title.owned", { name: first }) : t("library.title.yours")}</h1>
                 {/* Its height is kept while the shelf is read, so the tools below never jump. */}
                 <p className="lib-stats">
                   {hydrated && (
                     <>
                       <span>
-                        <b>{stats.count}</b> {stats.count === 1 ? "text" : "texts"}
+                        <b>{stats.count}</b> {t("library.stats.texts", { count: stats.count })}
                       </span>
                       {stats.topics > 0 && (
                         <span>
-                          <b>{stats.topics}</b> {stats.topics === 1 ? "topic" : "topics"}
+                          <b>{stats.topics}</b> {t("library.stats.topics", { count: stats.topics })}
                         </span>
                       )}
                       <span>
-                        <b>{stats.hours}</b> {stats.hours === 1 ? "hour" : "hours"} of reading
+                        <b>{stats.hours}</b> {t("library.stats.hours", { count: stats.hours })} {t("library.stats.ofReading")}
                       </span>
                       {stats.reading > 0 && (
                         <span>
-                          <b>{stats.reading}</b> in progress
+                          <b>{stats.reading}</b> {t("library.stats.reading", { count: stats.reading })}
                         </span>
                       )}
                       {stats.read > 0 && (
                         <span>
-                          <b>{stats.read}</b> read
+                          <b>{stats.read}</b> {t("library.stats.read", { count: stats.read })}
                         </span>
                       )}
                     </>
@@ -318,7 +327,7 @@ export function Library() {
             {fromAgent.length > 0 && (
               <button type="button" className="lib-news" onClick={() => (setTag("agent"), setOnly(null), go({ view: "shelf" }))}>
                 <Glyph k="agent" size={22} />
-                {fromAgent.length} new from your agent since you last looked
+                {t("library.newFromAgent", { count: fromAgent.length })}
               </button>
             )}
           </section>
@@ -327,7 +336,7 @@ export function Library() {
         {T ? (
           <div className="lib-tools is-topic">
             <button type="button" onClick={() => go({ view: "topics" })} className="lib-back">
-              <ChevronLeft size={16} /> All topics
+              <ChevronLeft size={16} /> {t("library.allTopics")}
             </button>
             <AddButton compact onClick={() => setAdding("agent")} />
           </div>
@@ -336,11 +345,11 @@ export function Library() {
             <ViewSwitch view={view} onChange={(v) => go({ view: v })} />
             {searchBox}
             {view === "shelf" && (
-              <div className="lib-sort" role="radiogroup" aria-label="Arrange by">
-                <span className="px-2 text-[12.5px] text-ink-4 max-md:hidden">Arrange by</span>
+              <div className="lib-sort" role="radiogroup" aria-label={t("library.arrangeBy")}>
+                <span className="px-2 text-[12.5px] text-ink-4 max-md:hidden">{t("library.arrangeBy")}</span>
                 {SORTS.map((s) => (
                   <button key={s.key} type="button" role="radio" aria-checked={sort === s.key} onClick={() => setSort(s.key)}>
-                    {s.label}
+                    {t(`library.sorts.${s.key}`)}
                   </button>
                 ))}
               </div>
@@ -349,13 +358,13 @@ export function Library() {
         )}
 
         {view === "shelf" && !T && (
-          <ChipRow label="Filter">
+          <ChipRow label={t("library.filter")}>
             <Chip on={!only && !tag} onClick={() => (setOnly(null), setTag(null))}>
-              All <span className="lib-n">{books.length}</span>
+              {t("library.all", { count: books.length })} <span className="lib-n">{books.length}</span>
             </Chip>
-            {topics.map(({ topic: t, books: bs }) => (
-              <Chip key={t.key} on={only === t.key} color={t.shades[0]} onClick={() => setOnly(only === t.key ? null : t.key)}>
-                <Glyph k={t.key} size={18} /> {t.name} <span className="lib-n">{bs.length}</span>
+            {topics.map(({ topic: tp, books: bs }) => (
+              <Chip key={tp.key} on={only === tp.key} color={tp.shades[0]} onClick={() => setOnly(only === tp.key ? null : tp.key)}>
+                <Glyph k={tp.key} size={18} /> {t(`library.topicNames.${tp.key}`)} <span className="lib-n">{bs.length}</span>
               </Chip>
             ))}
             {TAGS.some((t) => books.some(t.test)) && <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 self-center bg-rule-strong" />}
@@ -391,12 +400,12 @@ export function Library() {
                   />
                 )}
                 {hydrated && shown.size === 0 && books.length > 0 && (
-                  <p className="py-6 text-center text-[14px] text-ink-3">Nothing on the shelves matches{q ? <> &ldquo;{q}&rdquo;</> : ""}.</p>
+                  <p className="py-6 text-center text-[14px] text-ink-3">{q ? t("library.noMatch", { query: q }) : t("library.nothingHere")}</p>
                 )}
                 {hydrated && own.length < SAMPLES_UNTIL ? (
                   <Starter count={own.length} signedIn={Boolean(isSignedIn)} onAdd={setAdding} />
                 ) : (
-                  hydrated && <p className="lib-hint">Click a spine to take it down. Arrow keys walk the shelf.</p>
+                  hydrated && <p className="lib-hint">{t("library.hint")}</p>
                 )}
               </>
             ) : (
@@ -457,11 +466,11 @@ export function Library() {
 }
 
 /** Who wrote it, or failing that where it is from: a site's name without its domain ending, a file without its extension. */
-function bylineOf(x: { author?: string; source?: string; origin?: string }): string {
+function bylineOf(x: { author?: string; source?: string; origin?: string }, t: (key: TranslationKey) => string): string {
   if (x.author) return x.author;
   const src = x.source?.split(",")[0].trim();
   if (src) return src.replace(/^www\./, "").replace(/\.(pdf|txt|md|markdown)$/i, "").replace(/\.(com|org|net|io|ai|dev|co|edu|blog|app)(\.[a-z]{2})?$/i, "");
-  return x.origin === "paste" ? "Pasted text" : x.origin === "file" ? "A file" : "Saved";
+  return x.origin === "paste" ? t("library.byline.pasted") : x.origin === "file" ? t("library.byline.file") : t("library.byline.saved");
 }
 
 /**
@@ -469,6 +478,7 @@ function bylineOf(x: { author?: string; source?: string; origin?: string }): str
  * at an edge with more beyond it, and offers an arrow there to page along.
  */
 function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ l: false, r: false });
   useEffect(() => {
@@ -498,10 +508,10 @@ function ChipRow({ label, children }: { label: string; children: React.ReactNode
       <div ref={ref} className="lib-chips no-scrollbar" role="group" aria-label={label}>
         {children}
       </div>
-      <button type="button" className="lib-chip-page is-l" aria-label="Scroll filters left" tabIndex={-1} onClick={() => page(-1)}>
+      <button type="button" className="lib-chip-page is-l" aria-label={t("library.scrollLeft")} tabIndex={-1} onClick={() => page(-1)}>
         <ChevronLeft size={15} />
       </button>
-      <button type="button" className="lib-chip-page is-r" aria-label="Scroll filters right" tabIndex={-1} onClick={() => page(1)}>
+      <button type="button" className="lib-chip-page is-r" aria-label={t("library.scrollRight")} tabIndex={-1} onClick={() => page(1)}>
         <ChevronRight size={15} />
       </button>
     </div>
@@ -517,14 +527,15 @@ function Chip({ on, color, onClick, children }: { on: boolean; color?: string; o
 }
 
 function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const { t } = useI18n();
   return (
-    <div className="lib-switch" role="radiogroup" aria-label="View" data-view={view}>
+    <div className="lib-switch" role="radiogroup" aria-label={t("library.view")} data-view={view}>
       <span className="lib-switch-pill" aria-hidden />
       <button type="button" role="radio" aria-checked={view === "shelf"} onClick={() => onChange("shelf")}>
-        <LibraryIcon size={15} /> Shelf
+        <LibraryIcon size={15} /> {t("library.shelf")}
       </button>
       <button type="button" role="radio" aria-checked={view === "topics"} onClick={() => onChange("topics")}>
-        <LayoutGrid size={15} /> Topics
+        <LayoutGrid size={15} /> {t("library.topics")}
       </button>
     </div>
   );

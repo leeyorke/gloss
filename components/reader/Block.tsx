@@ -3,6 +3,7 @@
 import { memo, useState, type ReactNode } from "react";
 import { MessageCirclePlus } from "lucide-react";
 import type { Block as BlockT, Run } from "@/lib/article";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 /** `note`: a highlight with the reader's note, set only in the block where it ends. */
 export type Mark = { from: number; to: number; kind: "gloss" | "hl" | "pending"; id: string; color?: string; note?: boolean };
@@ -139,9 +140,10 @@ function Picture({ src, alt }: { src: string; alt?: string }) {
 }
 
 function Table({ rows, head }: { rows: string[][]; head?: boolean }) {
+  const { t } = useI18n();
   const body = head ? rows.slice(1) : rows;
   return (
-    <div className="tbl scroll-thin" tabIndex={0} role="region" aria-label="Table">
+    <div className="tbl scroll-thin" tabIndex={0} role="region" aria-label={t("reader.table")}>
       <table>
         {head && (
           <thead>
@@ -169,6 +171,7 @@ function Table({ rows, head }: { rows: string[][]; head?: boolean }) {
 }
 
 function BlockImpl({ block, n, first, marks, activeGloss, hoverGloss, activeHighlight, fresh, cursor, hasAt, onAsk }: Props) {
+  const { t } = useI18n();
   const Tag = block.type === "h2" ? "h2" : block.type === "h3" ? "h3" : block.type === "figure" ? "figure" : "div";
   const content = segments(block, marks, activeGloss, hoverGloss, activeHighlight, fresh);
   return (
@@ -183,8 +186,8 @@ function BlockImpl({ block, n, first, marks, activeGloss, hoverGloss, activeHigh
           type="button"
           className="pnum"
           onClick={() => onAsk(block.id)}
-          aria-label={`Ask about paragraph ${n}`}
-          data-tip={`Ask about \u00b6${n}`}
+          aria-label={t("reader.askAboutParagraph", { n })}
+          data-tip={t("reader.askAbout", { n })}
           data-tip-side="left"
         >
           {hasAt && <span className="pnum-dot" aria-hidden />}

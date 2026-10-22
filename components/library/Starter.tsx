@@ -6,6 +6,7 @@ import { normalizeUrl } from "@/lib/links";
 import { CLASSICS, classicCover } from "@/lib/classics";
 import { importFromUrl, keep } from "@/lib/import";
 import { useStore } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import type { AddTab } from "./AddPanel";
 import { MarkStack } from "./AgentMarks";
 
@@ -14,6 +15,7 @@ import { MarkStack } from "./AgentMarks";
  * classics in one click, links of your own, or an agent that shelves for you.
  */
 export function Starter({ count, signedIn, onAdd }: { count: number; signedIn: boolean; onAdd: (tab: AddTab) => void }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [failed, setFailed] = useState(0);
 
@@ -36,7 +38,7 @@ export function Starter({ count, signedIn, onAdd }: { count: number; signedIn: b
   };
 
   return (
-    <section className="starter" aria-label="Fill your library">
+    <section className="starter" aria-label={t("library.starter.label")}>
       <div className="starter-card is-classics">
         <div className="starter-fan" aria-hidden>
           {CLASSICS.slice(0, 5).map((c, i) => (
@@ -45,36 +47,37 @@ export function Starter({ count, signedIn, onAdd }: { count: number; signedIn: b
           ))}
         </div>
         <div className="min-w-0">
-          <p className="starter-title">{count ? "Add a few classics" : "Start with a few classics"}</p>
-          <p className="starter-body">A dozen essays people keep coming back to: Hamming, Feynman, Orwell, Graham, Wallace and more.</p>
+          <p className="starter-title">{count ? t("library.starter.classicsTitle") : t("library.starter.classicsTitleFirst")}</p>
+          <p className="starter-body">{t("library.starter.classicsBody")}</p>
           <button type="button" onClick={shelveClassics} disabled={Boolean(busy)} className="starter-btn">
             {busy ? (
               <>
-                <Loader2 size={15} className="animate-spin" /> Shelving {busy.done} of {busy.total}
+                <Loader2 size={15} className="animate-spin" /> {t("library.starter.shelving", { done: busy.done, total: busy.total })}
               </>
             ) : (
               <>
-                Shelve them <ArrowRight size={15} />
+                {t("library.starter.shelveThem")} <ArrowRight size={15} />
               </>
             )}
           </button>
-          {failed > 0 && !busy && <p className="mt-2 text-[12.5px] text-ink-3">{failed} couldn&apos;t be read in just now. Try again later.</p>}
+          {failed > 0 && !busy && <p className="mt-2 text-[12.5px] text-ink-3">{t("library.starter.failed", { count: failed })}</p>}
         </div>
       </div>
       <button type="button" className="starter-card" onClick={() => onAdd("links")}>
         <span className="starter-icon">
           <Link2 size={20} />
         </span>
-        <span className="starter-title">Save your own links</span>
-        <span className="starter-body">Paste one or many. Gloss reads each one in and sorts it onto a topic.</span>
+        <span className="starter-title">{t("library.starter.linksTitle")}</span>
+        <span className="starter-body">{t("library.starter.linksBody")}</span>
       </button>
       <button type="button" className="starter-card" onClick={() => onAdd("agent")}>
         <span className="starter-icon is-agent">
           <MarkStack size={24} />
         </span>
-        <span className="starter-title">Let your agent shelve for you</span>
+        <span className="starter-title">{t("library.starter.agentTitle")}</span>
         <span className="starter-body">
-          Give Grok Bot, Claude or ChatGPT your library, and ask it to save the good articles from your bookmarks.{!signedIn && " Needs an account."}
+          {t("library.starter.agentBody")}
+          {!signedIn && ` ${t("library.starter.agentNeedsAccount")}`}
         </span>
       </button>
     </section>

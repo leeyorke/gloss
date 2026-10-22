@@ -8,8 +8,10 @@ import { blockText, type Block } from "@/lib/article";
 import { openKeyMenu, readApiKey } from "@/lib/ask";
 import type { DocIndex } from "@/lib/doc";
 import { useStore } from "@/lib/store";
-import { TTS_MAX_CHARS } from "@/lib/voice";
+import { TTS_MAX_CHARS, silence } from "@/lib/voice";
 import { barBtn } from "@/components/ui/Popover";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { useReader } from "./context";
 
 /**
@@ -19,12 +21,18 @@ import { useReader } from "./context";
  */
 
 type Status = "idle" | "loading" | "playing" | "paused" | "error";
-type ListenState = { status: Status; block: string | null; rate: number; error?: string; needKey?: boolean };
+type ListenState = { status: Status; block: string | null; rate: number; error?: string; needKey?: boolean; t?: (key: TranslationKey) => string };
 
 const RATES = [1, 1.2, 1.4, 1.7, 2, 0.8];
 const RATE_KEY = "gloss:listen-rate";
 
 const useListen = create<ListenState>(() => ({ status: "idle", block: null, rate: 1 }));
+
+/** The words of the page, for the parts of the voice that live outside React. */
+function say(key: TranslationKey): string {
+  const t = useListen.getState().t;
+  return t ? t(key) : key;
+}
 
 /** Paragraphs are split at sentence ends; the very first clip is short, so the voice starts quickly. */
 function chunks(text: string, first: boolean): string[] {
@@ -44,28 +52,6 @@ function chunks(text: string, first: boolean): string[] {
 }
 
 const SPOKEN = new Set<Block["type"]>(["p", "h2", "h3", "quote", "li", "note"]);
-
-/** A few hundred milliseconds of silence, played inside the click so phones let the voice play later. */
-function silence(): string {
-  const n = 800;
-  const b = new DataView(new ArrayBuffer(44 + n * 2));
-  const str = (o: number, s: string) => [...s].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
-  str(0, "RIFF");
-  b.setUint32(4, 36 + n * 2, true);
-  str(8, "WAVEfmt ");
-  b.setUint32(16, 16, true);
-  b.setUint16(20, 1, true);
-  b.setUint16(22, 1, true);
-  b.setUint32(24, 8000, true);
-  b.setUint32(28, 16000, true);
-  b.setUint16(32, 2, true);
-  b.setUint16(34, 16, true);
-  str(36, "data");
-  b.setUint32(40, n * 2, true);
-  let bin = "";
-  new Uint8Array(b.buffer).forEach((x) => (bin += String.fromCharCode(x)));
-  return `data:audio/wav;base64,${btoa(bin)}`;
-}
 
 /* ---------------- the engine: one voice at a time ---------------- */
 
@@ -90,7 +76,7 @@ function clip(i: number): Promise<string> {
       if (!r.ok) {
         const j = (await r.json().catch(() => ({}))) as { error?: string; code?: string };
         if (j.code === "need_key") useListen.setState({ needKey: true });
-        throw new Error(j.error ?? "The voice did not answer.");
+        throw new Error(j.error ?? say("reader.listen.noAnswer"));
       }
       const url = URL.createObjectURL(await r.blob());
       urls.set(i, url);
@@ -123,7 +109,7 @@ async function playAt(i: number, s: number) {
   try {
     url = await clip(i);
   } catch (e) {
-    if (s === session) useListen.setState({ status: "error", error: e instanceof Error ? e.message : "The voice did not answer." });
+    if (s === session) useListen.setState({ status: "error", error: e instanceof Error ? e.message : say("reader.listen.noAnswer") });
     return;
   }
   if (s !== session || !audio) return;
@@ -144,7 +130,7 @@ export function startListening(ix: DocIndex, fromBlock: string | null) {
   stopListening();
   // Reading aloud always uses the reader's own key: say so before anything is fetched.
   if (!readApiKey()) {
-    useListen.setState({ status: "error", needKey: true, error: "Reading aloud uses your own Together key." });
+    useListen.setState({ status: "error", needKey: true, error: say("reader.listen.needsKey") });
     return;
   }
   const blocks = ix.article.blocks;
@@ -225,17 +211,24 @@ function cycleRate() {
 /** In the top bar, only when Listen is on in settings. Starts from the paragraph you are on. */
 export function ListenButton({ from }: { from: () => string | null }) {
   const { ix } = useReader();
+  const { t } = useI18n();
   const on = useStore((s) => s.settings.listen);
   const status = useListen((s) => s.status);
+
+  // The words of the page, for the parts of the voice that live outside React.
+  useEffect(() => {
+    useListen.setState({ t });
+  }, [t]);
+
   if (!on) return null;
   const active = status !== "idle";
   return (
     <button
       type="button"
       className={`${barBtn} ${active ? "bg-sunk text-ink" : ""}`}
-      aria-label={active ? "Stop reading aloud" : "Read aloud from here"}
+      aria-label={active ? t("reader.listen.stop") : t("reader.listen.fromHere")}
       aria-pressed={active}
-      data-tip={active ? "Stop reading aloud" : "Read aloud from here"}
+      data-tip={active ? t("reader.listen.stop") : t("reader.listen.fromHere")}
       onClick={() => {
         if (active) return stopListening();
         // The paragraph cursor when it is on screen, otherwise the first paragraph in view.
@@ -252,10 +245,16 @@ export function ListenButton({ from }: { from: () => string | null }) {
 /** While the voice is reading: a small bar just above the question box, and the cursor on the paragraph being read. */
 export function ListenBar() {
   const { ix, jumpToBlock } = useReader();
+  const { t } = useI18n();
   const { status, block, rate, error, needKey } = useListen();
   const on = useStore((s) => s.settings.listen);
   const setUI = useStore((s) => s.setUI);
   const prev = useRef<string | null>(null);
+
+  // The words of the page, for the parts of the voice that live outside React.
+  useEffect(() => {
+    useListen.setState({ t });
+  }, [t]);
 
   // Leaving the text, or switching Listen off, stops the voice.
   useEffect(() => () => stopListening(), [ix]);
@@ -283,7 +282,7 @@ export function ListenBar() {
   return (
     <div
       role="region"
-      aria-label="Reading aloud"
+      aria-label={t("reader.listen.label")}
       className="fixed bottom-[calc(env(safe-area-inset-bottom)+80px)] left-1/2 sm:bottom-[calc(env(safe-area-inset-bottom)+90px)] z-[46] flex -translate-x-1/2 items-center gap-1 rounded-full bg-lens p-1 text-lens-fg shadow-pop ring-1 ring-black/5"
       style={{ animation: "rise 0.35s var(--ease-out) both" }}
     >
@@ -291,7 +290,7 @@ export function ListenBar() {
         <button
           type="button"
           onClick={toggleListening}
-          aria-label={status === "playing" ? "Pause" : status === "error" ? "Try again" : "Play"}
+          aria-label={status === "playing" ? t("reader.listen.pause") : status === "error" ? t("reader.listen.retry") : t("reader.listen.play")}
           className="grid size-9 place-items-center rounded-full bg-[var(--rubric)] text-white transition-transform active:scale-90"
         >
           {status === "loading" ? (
@@ -317,7 +316,7 @@ export function ListenBar() {
               }}
               className="h-9 shrink-0 rounded-full px-3 text-[13px] font-medium underline decoration-lens-mute underline-offset-4 transition-colors hover:bg-lens-hover"
             >
-              Add key
+              {t("reader.listen.addKey")}
             </button>
           )}
         </>
@@ -326,22 +325,22 @@ export function ListenBar() {
           type="button"
           onClick={() => block && jumpToBlock(block, { flash: false })}
           className="h-9 rounded-full px-2.5 text-[13px] tabular-nums text-lens-fg/85 transition-colors hover:bg-lens-hover hover:text-lens-fg"
-          aria-label={n ? `Reading paragraph ${n}. Show it.` : "Show where it is reading"}
+          aria-label={n ? t("reader.listen.showParagraph", { n }) : t("reader.listen.showWhere")}
         >
-          {n ? `Reading ¶${n}` : "Reading"}
+          {n ? t("reader.listen.readingParagraph", { n }) : t("reader.listen.reading")}
         </button>
       )}
       {!needKey && (
         <button
           type="button"
           onClick={cycleRate}
-          aria-label={`Speed ${rate} times. Change speed.`}
+          aria-label={t("reader.listen.speed", { rate })}
           className="h-9 min-w-[48px] rounded-full px-2.5 text-[13px] font-medium tabular-nums transition-colors hover:bg-lens-hover"
         >
           {`${rate}×`}
         </button>
       )}
-      <button type="button" onClick={stopListening} aria-label="Stop reading aloud" className="grid size-9 place-items-center rounded-full text-lens-fg/80 transition-colors hover:bg-lens-hover hover:text-lens-fg">
+      <button type="button" onClick={stopListening} aria-label={t("reader.listen.stop")} className="grid size-9 place-items-center rounded-full text-lens-fg/80 transition-colors hover:bg-lens-hover hover:text-lens-fg">
         <Square size={13} fill="currentColor" strokeWidth={0} />
       </button>
     </div>

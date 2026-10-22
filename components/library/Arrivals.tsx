@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { TOPIC, lookOf, type Book } from "@/lib/library";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { MARK_NAMES, Mark, type AgentMark } from "./AgentMarks";
 import { Glyph, Plate } from "./Book";
 
@@ -41,6 +42,7 @@ export function Arrivals({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useRef(0);
+  const { t } = useI18n();
 
   // Confetti for each new batch, in the colours of what arrived.
   useEffect(() => {
@@ -53,12 +55,11 @@ export function Arrivals({
   }, [books]);
 
   const mark = markFor(wave.via);
-  const who = wave.agent ? (mark ? MARK_NAMES[mark] : wave.via || "Your agent") : null;
+  const who = wave.agent ? (mark ? MARK_NAMES[mark] : wave.via || t("library.arrivals.yourAgent")) : null;
   const n = books.length;
   const latest = books[n - 1];
   const shown = books.slice(-SHOWN);
   const more = n - shown.length;
-  const noun = n === 1 ? "article" : "articles";
 
   return createPortal(
     <div ref={ref} className="arr" data-done={wave.done || undefined} data-leaving={wave.leaving || undefined} role="status" aria-live="polite">
@@ -69,24 +70,18 @@ export function Arrivals({
         <p className="arr-line">
           {who ? (
             wave.done ? (
-              <>
-                <b>{who}</b> added {n} {noun} to your library
-              </>
+              <>{t("library.arrivals.added", { who, count: n })}</>
             ) : (
-              <>
-                <b>{who}</b> is adding articles to your library
-              </>
+              <>{t("library.arrivals.adding", { who })}</>
             )
           ) : wave.done ? (
-            <>
-              <b>{n}</b> new {noun} on your shelves
-            </>
+            <>{t("library.arrivals.newOnShelves", { count: n })}</>
           ) : (
-            <>Adding to your library</>
+            <>{t("library.arrivals.addingToLibrary")}</>
           )}
         </p>
         {!wave.done && <span className="arr-count tabular-nums">{n}</span>}
-        <button type="button" aria-label="Dismiss" onClick={onClose} className="arr-x">
+        <button type="button" aria-label={t("library.arrivals.dismiss")} onClick={onClose} className="arr-x">
           <X size={15} />
         </button>
       </div>
@@ -108,7 +103,7 @@ export function Arrivals({
           <span key={latest.id} className="arr-latest">
             <span className="arr-title">{latest.title}</span>
             <span className="arr-topic">
-              <Glyph k={latest.topic} size={15} /> {TOPIC[latest.topic].name}
+              <Glyph k={latest.topic} size={15} /> {t(`library.topicNames.${latest.topic}`)}
             </span>
           </span>
         )}
@@ -117,10 +112,10 @@ export function Arrivals({
       {wave.done ? (
         <div className="arr-actions">
           <button type="button" onClick={onShow} className="arr-show">
-            Show {n === 1 ? "it" : "them"} on the shelf
+            {n === 1 ? t("library.arrivals.showIt") : t("library.arrivals.showThem")}
           </button>
           <button type="button" onClick={onRemove} className="arr-undo">
-            Remove {n === 1 ? "it" : "them"}
+            {n === 1 ? t("library.arrivals.removeIt") : t("library.arrivals.removeThem")}
           </button>
         </div>
       ) : (

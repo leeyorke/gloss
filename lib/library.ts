@@ -217,16 +217,26 @@ export function sortBooks(books: Book[], sort: Sort): Book[] {
 }
 
 /** The label on the shelf under the first book of each run: a topic, a month or a length. */
-export function groupOf(b: Book, sort: Sort): { key: string; label: string; icon?: TopicKey | TagKey } | null {
-  if (sort === "topic") return { key: b.topic, label: TOPIC[b.topic].name, icon: b.topic };
+export type Group =
+  | { kind: "topic"; key: TopicKey; icon: TopicKey }
+  | { kind: "recent"; key: string; label: string; icon?: undefined }
+  | { kind: "length"; key: string; size: "underTen" | "oneSitting" | "anEvening" | "aWeekend"; icon?: TagKey };
+
+/**
+ * The run a book belongs to, when the shelf is sorted by topic, by month or by
+ * length. The words on the label are the reader's to choose, so only the shape
+ * of the run is decided here.
+ */
+export function groupOf(b: Book, sort: Sort, locale = "en"): Group | null {
+  if (sort === "topic") return { kind: "topic", key: b.topic, icon: b.topic };
   if (sort === "recent") {
-    const label = new Date(b.added).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-    return { key: label, label };
+    const label = new Date(b.added).toLocaleDateString(locale, { month: "long", year: "numeric" });
+    return { kind: "recent", key: label, label };
   }
   if (sort === "length") {
-    if (b.minutes < 10) return { key: "quick", label: "Under 10 min", icon: "quick" };
-    if (b.minutes < 30) return { key: "sitting", label: "One sitting" };
-    return { key: "long", label: b.minutes < 60 ? "An evening" : "A weekend", icon: "long" };
+    if (b.minutes < 10) return { kind: "length", key: "quick", size: "underTen", icon: "quick" };
+    if (b.minutes < 30) return { kind: "length", key: "sitting", size: "oneSitting" };
+    return { kind: "length", key: "long", size: b.minutes < 60 ? "anEvening" : "aWeekend", icon: "long" };
   }
   return null;
 }

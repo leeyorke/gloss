@@ -3,6 +3,7 @@
 import { Fragment, memo, type ReactNode } from "react";
 import { undash } from "@/lib/article";
 import type { Source } from "@/lib/models";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useReader } from "./context";
 
 /**
@@ -80,6 +81,7 @@ function WebCite({ s }: { s: Source }) {
 
 function Cite({ n, label }: { n: number; label: string }) {
   const { jumpTo, peek, ix } = useReader();
+  const { t } = useI18n();
   const exists = ix.byNumber.has(n);
   return (
     <button
@@ -95,7 +97,7 @@ function Cite({ n, label }: { n: number; label: string }) {
       onMouseLeave={() => peek(null)}
       onFocus={(e) => exists && peek(n, e.currentTarget.getBoundingClientRect())}
       onBlur={() => peek(null)}
-      aria-label={`Jump to paragraph ${n}`}
+      aria-label={t("reader.jumpToParagraph", { n })}
     >
       ¶{label}
     </button>
@@ -195,8 +197,9 @@ export const Answer = memo(AnswerImpl);
 
 /** The web results under an answer that used them, numbered as the answer cites them. */
 export function Sources({ sources }: { sources: Source[] }) {
+  const { t } = useI18n();
   return (
-    <ol className="sources mt-3 space-y-1 border-t border-rule pt-2.5" aria-label="Web sources">
+    <ol className="sources mt-3 space-y-1 border-t border-rule pt-2.5" aria-label={t("reader.webSources")}>
       {sources.map((s) => (
         <li key={s.n}>
           <a

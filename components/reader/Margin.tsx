@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { anchorToRange, blockEl } from "@/lib/anchor";
 import { MARKERS } from "@/lib/settings";
 import { useStore, type Gloss, type Highlight } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { GlossCard, marginStyle } from "./GlossCard";
 
 /** Room between notes; one-line notes in a crowded stretch sit close, like a list. */
@@ -63,6 +64,7 @@ export function Margin({
 }) {
   const colRef = useRef<HTMLDivElement>(null);
   const cards = useRef(new Map<string, HTMLElement>());
+  const { t } = useI18n();
   const activeGloss = useStore((s) => s.activeGloss);
   const activeHighlight = useStore((s) => s.activeHighlight);
   const active = activeGloss ?? (activeHighlight && notes.some((h) => h.id === activeHighlight) ? activeHighlight : null);
@@ -213,7 +215,7 @@ export function Margin({
           onClick={() => onOpenNote(h)}
           className={`mnote${active === h.id ? " is-active" : ""}`}
           style={{ ...marginStyle(layout.tops[h.id], !placed.current.has(h.id)), ["--note-c" as string]: MARKERS.find((m) => m.key === (h.color ?? "yellow"))?.color }}
-          aria-label={`Your note: ${h.note}. Edit note.`}
+          aria-label={t("reader.margin.noteLabel", { note: h.note ?? "" })}
         >
           <span className="line-clamp-4 whitespace-pre-line">{h.note}</span>
         </button>
@@ -223,13 +225,14 @@ export function Margin({
 }
 
 function EmptyMargin({ top }: { top: number }) {
+  const { t } = useI18n();
   return (
     <div
       className="rise absolute inset-x-0 border-l-[1.5px] border-rule-strong py-1 pl-[15px] text-[13px] leading-relaxed text-ink-3"
       style={{ top, animationDelay: "500ms" }}
     >
-      <p className="font-medium text-ink-2">This area is for notes.</p>
-      <p className="mt-1">Select any passage, then just start typing to ask.</p>
+      <p className="font-medium text-ink-2">{t("reader.margin.emptyTitle")}</p>
+      <p className="mt-1">{t("reader.margin.emptyBody")}</p>
     </div>
   );
 }

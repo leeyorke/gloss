@@ -5,8 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ArrowUpRight, X } from "lucide-react";
 import { blockEl, selectBlock, spanIn } from "@/lib/anchor";
 import { displayArticle, isHeading, readingMinutes, titleClass, type Article } from "@/lib/article";
-import { ARTICLE_QUESTIONS } from "@/lib/actions";
-import { SAMPLE_QUESTIONS } from "@/lib/samples";
+import { SAMPLE_QUESTION_KEYS } from "@/lib/samples";
 import { fetchBrief } from "@/lib/ask";
 import { BRAND } from "@/lib/brand";
 import { indexArticle } from "@/lib/doc";
@@ -14,6 +13,8 @@ import { fetchText } from "@/lib/sync";
 import { loadDoc, useGlosses, useHighlights, useStore, type Anchor } from "@/lib/store";
 import { applySettings } from "@/lib/settings";
 import { GlossWordmark } from "@/components/brand/Gloss";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { Block, type Mark } from "./Block";
 import { Brief } from "./Brief";
 import { CarefulRead } from "./CarefulRead";
@@ -30,6 +31,7 @@ import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 
 export function Reader({ id, initial }: { id: string; initial: Article | null }) {
+  const { t, path } = useI18n();
   const [article, setArticle] = useState<Article | null>(initial);
   const [missing, setMissing] = useState(false);
   const hydrate = useStore((s) => s.hydrate);
@@ -79,10 +81,10 @@ export function Reader({ id, initial }: { id: string; initial: Article | null })
       <main className="grid min-h-dvh place-items-center px-6 text-center">
         <div>
           <GlossWordmark />
-          <p className="mt-6 font-serif text-[26px] text-ink">This text is not on this device.</p>
-          <p className="mt-2 text-[14px] text-ink-3">Imported texts live in the browser that imported them, or in your account when you are signed in.</p>
-          <Link href="/" className="mt-6 inline-flex h-10 items-center rounded-full bg-ink px-5 text-[14px] font-medium text-bg">
-            Back to the library
+          <p className="mt-6 font-serif text-[26px] text-ink">{t("reader.missing.title")}</p>
+          <p className="mt-2 text-[14px] text-ink-3">{t("reader.missing.body")}</p>
+          <Link href={path("/library")} className="mt-6 inline-flex h-10 items-center rounded-full bg-ink px-5 text-[14px] font-medium text-bg">
+            {t("reader.missing.back")}
           </Link>
         </div>
       </main>
@@ -107,6 +109,7 @@ const GUTTER_WIDE = 64;
 const GUTTER_MID = 52;
 
 function ReaderInner({ article }: { article: Article }) {
+  const { t } = useI18n();
   const ix = useMemo(() => indexArticle(article), [article]);
   const articleId = article.id;
   const [articleEl, setArticleEl] = useState<HTMLDivElement | null>(null);
@@ -472,7 +475,7 @@ function ReaderInner({ article }: { article: Article }) {
 
   const paraCount = ix.byNumber.size;
   // A short line above the title: where this came from.
-  const kicker = article.source ? article.source.split(/,|\(/)[0].trim() : article.origin === "paste" ? "Pasted text" : undefined;
+  const kicker = article.source ? article.source.split(/,|\(/)[0].trim() : article.origin === "paste" ? t("landing.byline.pasted") : undefined;
 
   return (
     <ReaderContext.Provider value={api}>
@@ -508,7 +511,7 @@ function ReaderInner({ article }: { article: Article }) {
                 <div className="focus-hide rise mt-8 flex items-center gap-4 border-t border-rule pt-5" style={{ animationDelay: "140ms" }}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14.5px] leading-snug text-ink">
-                      {article.author ? <span className="font-medium">{article.author}</span> : <span className="font-medium">{kicker ?? "Untitled source"}</span>}
+                      {article.author ? <span className="font-medium">{article.author}</span> : <span className="font-medium">{kicker ?? t("reader.untitledSource")}</span>}
                       {article.published && <span className="text-ink-3">{`  \u00b7  ${article.published}`}</span>}
                     </p>
                     <p className="mt-1 text-[13px] leading-snug text-ink-3">
@@ -573,7 +576,7 @@ function ReaderInner({ article }: { article: Article }) {
                 </div>
               </footer>
 
-              <Composer ref={composerRef} currentBlock={askAnchor} suggestions={SAMPLE_QUESTIONS[article.id] ?? ARTICLE_QUESTIONS} />
+              <Composer ref={composerRef} currentBlock={askAnchor} suggestions={(SAMPLE_QUESTION_KEYS[article.id] ?? []).map((k) => t(k as TranslationKey))} />
             </div>
 
             <div className="rg-gutter" aria-hidden />
@@ -586,7 +589,7 @@ function ReaderInner({ article }: { article: Article }) {
             role="status"
             className="focus-hint pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+32px)] left-1/2 z-40 whitespace-nowrap rounded-full bg-lens px-4 py-2 text-[13px] text-lens-fg shadow-pop"
           >
-            {window.matchMedia("(pointer: coarse)").matches ? "Focus mode. Scroll up for the menu." : "Focus mode. Press F or Esc to leave."}
+            {window.matchMedia("(pointer: coarse)").matches ? t("reader.focusHintTouch") : t("reader.focusHint")}
           </p>
         )}
 
@@ -616,7 +619,7 @@ function ReaderInner({ article }: { article: Article }) {
         {toast?.kind === "hint" && (
           <Toast onClose={dismissHint}>
             {window.matchMedia("(pointer: coarse)").matches ? (
-              <span>Select any passage to ask about it, explain it or highlight it.</span>
+              <span>{t("reader.selectPassage")}</span>
             ) : (
               <span>
                 Select any passage, then <span className="font-medium">just start typing</span> to ask about it.
@@ -634,6 +637,7 @@ const EMPTY: Mark[] = [];
 /** Under 1080px there is no margin, so the active gloss rises as a sheet. */
 function GlossSheet() {
   const { ix } = useReader();
+  const { t } = useI18n();
   const glosses = useGlosses(ix.article.id);
   const active = useStore((s) => s.activeGloss);
   const notebookOpen = useStore((s) => s.notebookOpen);
@@ -647,7 +651,7 @@ function GlossSheet() {
     >
       <div className="sticky top-0 z-10 flex items-center justify-center bg-raised/95 pb-1 pt-2.5 backdrop-blur">
         <span className="h-1 w-9 rounded-full bg-rule-strong" aria-hidden />
-        <button type="button" aria-label="Close" onClick={() => setUI({ activeGloss: null })} className="absolute right-3 top-2 grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-sunk">
+        <button type="button" aria-label={t("reader.close")} onClick={() => setUI({ activeGloss: null })} className="absolute right-3 top-2 grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-sunk">
           <X size={16} />
         </button>
       </div>

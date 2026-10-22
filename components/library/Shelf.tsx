@@ -1,7 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, ViewTransition } from "react";
-import { fmtMinutes, groupOf, lookOf, type Book, type Sort, type TagKey, type TopicKey } from "@/lib/library";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, ViewTransition } from "react";
+import { groupOf, lookOf, type Book, type Group, type Sort, type TagKey, type TopicKey } from "@/lib/library";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { Glyph, Spine } from "./Book";
 
 const PAD = 28;
@@ -47,7 +48,7 @@ type Label = { key: string; label: string; icon?: TopicKey | TagKey; x: number; 
  * labels never to meet. The books are placed absolutely, so a new sort or
  * filter slides each one to its new spot instead of re-flowing.
  */
-function shelve(books: Book[], width: number, sort: Sort) {
+function shelve(books: Book[], width: number, sort: Sort, locale: string, labelOf: (g: Group) => string) {
   const pos = new Map<string, Pos>();
   const labels: Label[] = [];
   const ends: number[] = [];
@@ -55,9 +56,9 @@ function shelve(books: Book[], width: number, sort: Sort) {
   const right = inner - PAD;
 
   // Consecutive books of one group make a run.
-  const runs: { g: ReturnType<typeof groupOf>; books: Book[] }[] = [];
+  const runs: { g: Group | null; books: Book[] }[] = [];
   for (const b of books) {
-    const g = groupOf(b, sort);
+    const g = groupOf(b, sort, locale);
     const last = runs[runs.length - 1];
     if (last && (last.g?.key ?? null) === (g?.key ?? null)) last.books.push(b);
     else runs.push({ g, books: [b] });
@@ -78,7 +79,7 @@ function shelve(books: Book[], width: number, sort: Sort) {
   for (const run of runs) {
     const ws = run.books.map((b) => lookOf(b).w);
     const runW = ws.reduce((n, w) => n + w, 0) + GAP * (ws.length - 1);
-    const lw = run.g ? labelWidth({ label: run.g.label, icon: run.g.icon, count: run.books.length }) : 0;
+    const lw = run.g ? labelWidth({ label: labelOf(run.g), icon: run.g.icon, count: run.books.length }) : 0;
     let x = PAD;
     if (used) {
       x = edge + GROUP_GAP;
@@ -109,7 +110,7 @@ function shelve(books: Book[], width: number, sort: Sort) {
       let left = (segStart + segEnd) / 2 - lw / 2;
       if (before) left = Math.max(left, before.x + labelWidth(before) + LABEL_GAP);
       left = Math.max(2, Math.min(inner - lw, left));
-      labels.push({ key: run.g.key, label: run.g.label, icon: run.g.icon, x: left, row: segRow, count: run.books.length });
+      labels.push({ key: run.g.key, label: labelOf(run.g), icon: run.g.icon, x: left, row: segRow, count: run.books.length });
       if (row === segRow) labelEdge = left + lw;
     }
   }
@@ -139,8 +140,19 @@ export function Shelf({
   onLabel?: (key: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { t, tag, formatMinutes } = useI18n();
   const [width, setWidth] = useState(0);
   const [entering, setEntering] = useState(true);
+
+  // The words on a shelf label, in the reader's language.
+  const labelOf = useCallback(
+    (g: Group) => {
+      if (g.kind === "topic") return t(`library.topicNames.${g.key}`);
+      if (g.kind === "length") return t(`library.groups.${g.size}`);
+      return g.label;
+    },
+    [t],
+  );
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -156,7 +168,7 @@ export function Shelf({
   }, []);
 
   const visible = useMemo(() => books.filter((b) => shown.has(b.id)), [books, shown]);
-  const { pos, labels, rows, ends } = useMemo(() => shelve(visible, width, sort), [visible, width, sort]);
+  const { pos, labels, rows, ends } = useMemo(() => shelve(visible, width, sort, tag, labelOf), [visible, width, sort, tag, labelOf]);
 
   // A book taken off the shelf stays where it last stood while it fades; one
   // coming back appears at its new place without sliding across the room.
@@ -206,7 +218,7 @@ export function Shelf({
           </>
         );
         return onLabel ? (
-          <button key={`${sort}-${l.key}`} type="button" className="plank-label" style={style} onClick={() => onLabel(l.key)} data-tip={`Open ${l.label}`}>
+          <button key={`${sort}-${l.key}`} type="button" className="plank-label" style={style} onClick={() => onLabel(l.key)} data-tip={t("library.openTopic", { topic: l.label })}>
             {body}
           </button>
         ) : (
@@ -267,7 +279,7 @@ export function Shelf({
                   aria-hidden={out || undefined}
                   aria-label={`${b.title}, ${b.author}`}
                   data-tip={b.title}
-                  data-tip-hint={`${b.author} · ${fmtMinutes(b.minutes)}${b.pct > 0 && b.pct < 1 ? ` · ${Math.round(b.pct * 100)}% read` : b.pct >= 1 ? " · read" : ""}`}
+                  data-tip-hint={`${b.author} · ${formatMinutes(b.minutes)}${b.pct > 0 && b.pct < 1 ? ` · ${t("library.book.percentRead", { percent: Math.round(b.pct * 100) })}` : b.pct >= 1 ? ` · ${t("library.book.read")}` : ""}`}
                   onClick={(e) => onOpen(b, e.currentTarget.querySelector(".spine") as HTMLElement)}
                   onPointerEnter={() => warm(b)}
                   onFocus={() => warm(b)}

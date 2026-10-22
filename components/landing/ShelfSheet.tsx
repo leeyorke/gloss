@@ -7,6 +7,8 @@ import { Check, Download, PencilLine, Search, X } from "lucide-react";
 import { readingMinutes, tidyTitle } from "@/lib/article";
 import { exportAll } from "@/lib/export";
 import { useStore, type Highlight } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
+
 /** One text in the sheet: a shelf entry or a sample, with how far it has been read. */
 export type ShelfItem = {
   id: string;
@@ -23,11 +25,11 @@ export type ShelfItem = {
 
 type Filter = "all" | "reading" | "unread" | "done";
 
-const FILTERS: { key: Filter; label: string; test: (it: ShelfItem) => boolean }[] = [
-  { key: "all", label: "All", test: () => true },
-  { key: "reading", label: "Reading", test: (it) => it.pct > 0 && it.pct < 1 },
-  { key: "unread", label: "Not started", test: (it) => it.pct === 0 },
-  { key: "done", label: "Finished", test: (it) => it.pct >= 1 },
+const FILTERS: { key: Filter; test: (it: ShelfItem) => boolean }[] = [
+  { key: "all", test: () => true },
+  { key: "reading", test: (it) => it.pct > 0 && it.pct < 1 },
+  { key: "unread", test: (it) => it.pct === 0 },
+  { key: "done", test: (it) => it.pct >= 1 },
 ];
 
 /** How far along, as a ring: empty, a pen-coloured arc, or closed with a tick. */
@@ -65,6 +67,7 @@ export function ShelfSheet({
   onRename: (id: string, title: string) => void;
   onRemove: (it: ShelfItem) => void;
 }) {
+  const { t, path, formatMinutes } = useI18n();
   const view = useStore((s) => s.shelf);
   const setUI = useStore((s) => s.setUI);
   const open = view !== null;
@@ -133,7 +136,7 @@ export function ShelfSheet({
         .flat()
         .filter((h) => titles.has(h.articleId))
         .sort((a, b) => b.createdAt - a.createdAt),
-    [highlights, titles]
+    [highlights, titles],
   );
   const shownHighlights = useMemo(() => {
     const words = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -158,20 +161,22 @@ export function ShelfSheet({
   return createPortal(
     <div className="fixed inset-0 z-[80]" role="presentation">
       <div className="absolute inset-0 bg-ink/20 backdrop-blur-[2px]" style={{ animation: "fade 0.25s both" }} onClick={() => onOpenChange(false)} />
-      <section role="dialog" aria-modal aria-label="Your shelf" className="shelf-sheet">
+      <section role="dialog" aria-modal aria-label={t("shelf.title")} className="shelf-sheet">
         <div className="mx-auto flex h-full w-full max-w-[1040px] flex-col px-5 sm:px-10">
           <header className="flex flex-wrap items-center gap-x-6 gap-y-4 pb-5 pt-7">
             <div className="min-w-0 flex-1">
               <h2 className="flex items-baseline gap-3 font-serif text-[30px] leading-none tracking-[-0.015em] text-ink">
-                Your shelf
-                <Link href="/library" className="font-sans text-[13px] tracking-normal text-ink-3 underline decoration-rule-strong underline-offset-4 transition-colors hover:text-ink">
-                  Open the library
+                {t("shelf.title")}
+                <Link href={path("/library")} className="font-sans text-[13px] tracking-normal text-ink-3 underline decoration-rule-strong underline-offset-4 transition-colors hover:text-ink">
+                  {t("shelf.openLibrary")}
                 </Link>
               </h2>
               <p className="mt-2 text-[13px] text-ink-3">
                 {view === "highlights"
-                  ? `${allHighlights.length} highlight${allHighlights.length === 1 ? "" : "s"} across your texts`
-                  : `${items.length} texts${counts.reading ? ` · ${counts.reading} in progress` : ""}`}
+                  ? t("shelf.highlightsLine", { count: allHighlights.length })
+                  : counts.reading
+                    ? t("shelf.textsLineInProgress", { count: items.length, reading: counts.reading })
+                    : t("shelf.textsLine", { count: items.length })}
               </p>
             </div>
             <label className="flex h-10 w-full items-center gap-2 rounded-full border border-rule bg-bg px-3.5 transition-colors focus-within:border-rule-strong sm:w-[300px]">
@@ -180,8 +185,8 @@ export function ShelfSheet({
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder={view === "highlights" ? "Search highlights and notes" : "Find a title or author"}
-                aria-label={view === "highlights" ? "Search highlights and notes" : "Find a title or author"}
+                placeholder={view === "highlights" ? t("shelf.searchHighlights") : t("shelf.searchTitles")}
+                aria-label={view === "highlights" ? t("shelf.searchHighlights") : t("shelf.searchTitles")}
                 className="h-full min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-4 focus-visible:outline-none"
               />
             </label>
@@ -189,9 +194,9 @@ export function ShelfSheet({
               {anyNotes && (
                 <button
                   type="button"
-                  aria-label="Export all notes"
-                  data-tip={exported !== null ? `Exported ${exported} text${exported === 1 ? "" : "s"}` : "Export all notes"}
-                  data-tip-hint={exported !== null ? undefined : "Markdown files, ready for Obsidian"}
+                  aria-label={t("shelf.export")}
+                  data-tip={exported !== null ? t("shelf.exported", { count: exported }) : t("shelf.export")}
+                  data-tip-hint={exported !== null ? undefined : t("shelf.exportHint")}
                   onClick={async () => setExported(await exportAll())}
                   className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-sunk hover:text-ink"
                 >
@@ -200,8 +205,8 @@ export function ShelfSheet({
               )}
               <button
                 type="button"
-                aria-label="Close"
-                data-tip="Close"
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
                 data-tip-kbd="Esc"
                 onClick={() => onOpenChange(false)}
                 className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-sunk hover:text-ink"
@@ -211,7 +216,7 @@ export function ShelfSheet({
             </div>
           </header>
 
-          <div role="radiogroup" aria-label="Show" className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto border-b border-rule px-1 pb-3">
+          <div role="radiogroup" aria-label={t("shelf.show")} className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto border-b border-rule px-1 pb-3">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -227,7 +232,7 @@ export function ShelfSheet({
                   view === "texts" && filter === f.key ? "bg-ink text-bg" : "text-ink-3 hover:bg-sunk hover:text-ink"
                 }`}
               >
-                {f.label}
+                {t(`shelf.filters.${f.key}`)}
                 <span className={`tabular-nums ${view === "texts" && filter === f.key ? "text-bg/60" : "text-ink-4"}`}>{counts[f.key]}</span>
               </button>
             ))}
@@ -243,7 +248,7 @@ export function ShelfSheet({
                     view === "highlights" ? "bg-ink text-bg" : "text-ink-3 hover:bg-sunk hover:text-ink"
                   }`}
                 >
-                  Highlights
+                  {t("shelf.highlightsTab")}
                   <span className={`tabular-nums ${view === "highlights" ? "text-bg/60" : "text-ink-4"}`}>{allHighlights.length}</span>
                 </button>
               </>
@@ -257,6 +262,7 @@ export function ShelfSheet({
                   key={h.id}
                   h={h}
                   i={i}
+                  href={path(`/read/${h.articleId}`)}
                   title={titles.get(h.articleId)?.title ?? ""}
                   onOpen={() => {
                     onOpenChange(false);
@@ -266,7 +272,7 @@ export function ShelfSheet({
               ))}
               {!shownHighlights.length && (
                 <li className="py-16 text-center text-[14px] text-ink-3">
-                  {q ? <>No highlight or note matches &ldquo;{q}&rdquo;.</> : "No highlights yet."}
+                  {q ? t("shelf.noHighlightMatch", { query: q }) : t("shelf.noHighlights")}
                 </li>
               )}
             </ul>
@@ -286,7 +292,7 @@ export function ShelfSheet({
                 ) : (
                 <>
                 <Link
-                  href={`/read/${it.id}`}
+                  href={path(`/read/${it.id}`)}
                   data-row
                   onClick={(e) => {
                     if (e.metaKey || e.ctrlKey) return;
@@ -302,15 +308,15 @@ export function ShelfSheet({
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 font-serif text-[18px] leading-[1.2] tracking-[-0.01em] text-ink">{tidyTitle(it.title)}</span>
                     <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-ink-3">
-                      {it.sample && <span className="rounded-full border border-dashed border-rule-strong px-1.5 text-[11.5px] leading-[17px] text-ink-3">Sample</span>}
+                      {it.sample && <span className="rounded-full border border-dashed border-rule-strong px-1.5 text-[11.5px] leading-[17px] text-ink-3">{t("shelf.sample")}</span>}
                       <span className="max-w-[60%] truncate">{it.byline}</span>
                       <span aria-hidden className="text-ink-4">{"·"}</span>
-                      <span className="tabular-nums">{it.pct > 0 && it.pct < 1 ? `${Math.round(it.pct * 100)}% read` : `${readingMinutes(it.words)} min`}</span>
+                      <span className="tabular-nums">{it.pct > 0 && it.pct < 1 ? t("shelf.percentRead", { percent: Math.round(it.pct * 100) }) : formatMinutes(readingMinutes(it.words))}</span>
                       {it.glosses > 0 && (
                         <>
                           <span aria-hidden className="text-ink-4">{"·"}</span>
                           <span className="text-rubric-text">
-                            {it.glosses} note{it.glosses === 1 ? "" : "s"}
+                            {t("common.notes", { count: it.glosses })}
                           </span>
                         </>
                       )}
@@ -320,8 +326,8 @@ export function ShelfSheet({
                 {!it.sample && (
                   <button
                     type="button"
-                    aria-label={`Rename ${it.title}`}
-                    data-tip="Rename"
+                    aria-label={t("shelf.renameItem", { title: it.title })}
+                    data-tip={t("shelf.rename")}
                     onClick={() => setRenaming(it.id)}
                     className="absolute right-10 top-3 grid size-7 place-items-center rounded-full text-ink-4 opacity-0 transition-[opacity,background-color] hover:bg-bg hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                   >
@@ -330,8 +336,8 @@ export function ShelfSheet({
                 )}
                 <button
                   type="button"
-                  aria-label={it.sample ? `Remove the sample ${it.title}` : `Remove ${it.title} from your shelf`}
-                  data-tip={it.sample ? "Remove this sample" : "Remove from shelf"}
+                  aria-label={it.sample ? t("shelf.removeSample") : t("shelf.removeTitle", { title: it.title })}
+                  data-tip={it.sample ? t("shelf.removeSample") : t("shelf.removeFromShelf")}
                   onClick={() => onRemove(it)}
                   className="absolute right-2 top-3 grid size-7 place-items-center rounded-full text-ink-4 opacity-0 transition-[opacity,background-color] hover:bg-bg hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
@@ -343,7 +349,7 @@ export function ShelfSheet({
             ))}
             {!shown.length && (
               <li className="col-span-full py-16 text-center text-[14px] text-ink-3">
-                {q ? <>Nothing on your shelf matches &ldquo;{q}&rdquo;.</> : "Nothing here yet."}
+                {q ? t("shelf.noShelfMatch", { query: q }) : t("shelf.emptyShelf")}
               </li>
             )}
           </ul>
@@ -351,12 +357,13 @@ export function ShelfSheet({
         </div>
       </section>
     </div>,
-    document.body
+    document.body,
   );
 }
 
 /** A title being renamed in place: Enter or leaving keeps it, Esc keeps the old one. */
 function RenameRow({ title, onDone }: { title: string; onDone: (title: string | null) => void }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   const finish = (v: string | null) => {
@@ -374,7 +381,7 @@ function RenameRow({ title, onDone }: { title: string; onDone: (title: string | 
       <input
         ref={ref}
         defaultValue={title}
-        aria-label="Title"
+        aria-label={t("shelf.renameTitle")}
         spellCheck={false}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -395,11 +402,11 @@ function RenameRow({ title, onDone }: { title: string; onDone: (title: string | 
 }
 
 /** One highlight on the shelf: the marked words, the reader's note under them, and where they are from. */
-function HighlightRow({ h, i, title, onOpen }: { h: Highlight; i: number; title: string; onOpen: () => void }) {
+function HighlightRow({ h, i, href, title, onOpen }: { h: Highlight; i: number; href: string; title: string; onOpen: () => void }) {
   return (
     <li className="shelf-row" style={{ animationDelay: `${Math.min(i, 14) * 18}ms` }}>
       <a
-        href={`/read/${h.articleId}`}
+        href={href}
         data-row
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey) return;

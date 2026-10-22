@@ -8,6 +8,7 @@ import { useLibraryPrefs } from "@/lib/library-prefs";
 import { SAMPLE_SHELF } from "@/lib/classics";
 import { SAMPLES } from "@/lib/samples";
 import { useStore } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 export type Saved = { id: string; title: string };
 
@@ -29,6 +30,7 @@ function Ring({ pct }: { pct: number }) {
  * bundled samples. Its room is always kept, so the headline above never moves.
  */
 export function LibraryLine({ saved }: { saved: Saved | null }) {
+  const { t, path } = useI18n();
   const hydrated = useStore((s) => s.hydrated);
   const library = useStore((s) => s.library);
   const progress = useStore((s) => s.progress);
@@ -51,11 +53,11 @@ export function LibraryLine({ saved }: { saved: Saved | null }) {
         <span className="lib-line-note">
           <Check size={14} className="shrink-0 text-good" />
           <span className="min-w-0 truncate">
-            Saved <span className="text-ink">{tidyTitle(saved.title)}</span> to your library
+            {t("landing.savedBefore")} <span className="text-ink">{tidyTitle(saved.title)}</span> {t("landing.savedAfter")}
           </span>
         </span>
-        <Link href="/library" className="lib-line-go">
-          Open <ArrowRight size={13} />
+        <Link href={path("/library")} className="lib-line-go">
+          {t("common.open")} <ArrowRight size={13} />
         </Link>
       </p>
     );
@@ -66,9 +68,9 @@ export function LibraryLine({ saved }: { saved: Saved | null }) {
     if (!samples.length) return <div className="lib-line" aria-hidden />;
     return (
       <p className="lib-line">
-        <span>No link handy? Try</span>
+        <span>{t("landing.noLink")}</span>
         {samples.map((a) => (
-          <Link key={a.id} href={`/read/${a.id}`} className="lib-sample" data-tip={a.title} data-tip-hint={`${a.author}, ${a.published}`}>
+          <Link key={a.id} href={path(`/read/${a.id}`)} className="lib-sample" data-tip={a.title} data-tip-hint={`${a.author}, ${a.published}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={SAMPLE_SHELF[a.id]?.cover} alt="" draggable={false} />
             {a.author?.split(" ").slice(-1)[0]}
@@ -81,21 +83,21 @@ export function LibraryLine({ saved }: { saved: Saved | null }) {
   return (
     <p className="lib-line">
       {reading ? (
-        <Link href={`/read/${reading.id}`} className="lib-line-note group transition-colors hover:text-ink">
+        <Link href={path(`/read/${reading.id}`)} className="lib-line-note group transition-colors hover:text-ink">
           <Ring pct={reading.pct} />
           <span className="min-w-0 truncate">
-            Continue <span className="text-ink">{reading.title}</span>
+            {t("landing.continueBefore")} <span className="text-ink">{reading.title}</span>
           </span>
           <span className="shrink-0 tabular-nums text-ink-4">{Math.round(reading.pct * 100)}%</span>
         </Link>
       ) : (
         <span className="lib-line-note">
-          {library.length} {library.length === 1 ? "text" : "texts"} on your shelves
+          {t("landing.shelves", { count: library.length })}
         </span>
       )}
       {library.length > 0 && (
-        <Link href="/library" className="lib-line-go">
-          Your library <ArrowRight size={13} />
+        <Link href={path("/library")} className="lib-line-go">
+          {t("landing.yourLibrary")} <ArrowRight size={13} />
         </Link>
       )}
     </p>

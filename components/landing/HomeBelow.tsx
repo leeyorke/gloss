@@ -8,24 +8,20 @@ import { tidyTitle } from "@/lib/article";
 import { SAMPLES } from "@/lib/samples";
 import { useStore } from "@/lib/store";
 import { todaysReview } from "@/lib/review";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { DailyHighlight } from "./DailyHighlight";
 import { Desk, DeskLink } from "./Desk";
 
 const RECENT = 3;
 
-const STEPS = [
-  { title: "Paste a link", body: "An article, a chapter or a PDF." },
-  { title: "Select any line", body: "A word, a sentence, a passage." },
-  { title: "Ask it anything", body: "The answer lands in the margin, citing the text." },
-];
-
 function SignInLine({ children }: { children: string }) {
+  const { t } = useI18n();
   return (
     <>
       {children}{" "}
       <SignInButton mode="modal">
         <button type="button" className="font-medium text-ink-2 underline decoration-rule-strong underline-offset-4 transition-colors hover:text-ink">
-          Sign in
+          {t("landing.signIn")}
         </button>
       </SignInButton>
     </>
@@ -37,10 +33,20 @@ function SignInLine({ children }: { children: string }) {
  * one is due, otherwise the lines you marked last. Before that, how it works.
  */
 export function HomeBelow({ signedIn }: { signedIn: boolean }) {
+  const { t, path } = useI18n();
   const hydrated = useStore((s) => s.hydrated);
   const highlights = useStore((s) => s.highlights);
   const library = useStore((s) => s.library);
   const setUI = useStore((s) => s.setUI);
+
+  const steps = useMemo(
+    () => [
+      { title: t("landing.steps.one.title"), body: t("landing.steps.one.body") },
+      { title: t("landing.steps.two.title"), body: t("landing.steps.two.body") },
+      { title: t("landing.steps.three.title"), body: t("landing.steps.three.body") },
+    ],
+    [t],
+  );
 
   const titleOf = useMemo(() => {
     const m = new Map<string, string>();
@@ -55,20 +61,20 @@ export function HomeBelow({ signedIn }: { signedIn: boolean }) {
         .flat()
         .filter((h) => titleOf.has(h.articleId))
         .sort((a, b) => b.createdAt - a.createdAt),
-    [highlights, titleOf]
+    [highlights, titleOf],
   );
 
   // Held open at its full size until the shelf is read, so nothing shifts when it fills.
   if (!hydrated) return <div className="desk is-holding" aria-hidden />;
 
-  const foot = signedIn ? null : <SignInLine>{all.length ? "These live in this browser only." : "Keep your highlights on every device."}</SignInLine>;
+  const foot = signedIn ? null : <SignInLine>{all.length ? t("landing.signInLocal") : t("landing.signInSync")}</SignInLine>;
 
   // Before any highlights: Hassan's three steps, for first-timers and anyone signed out.
   if (!all.length)
     return (
-      <Desk label="How it works" foot={foot}>
+      <Desk label={t("landing.desk.howItWorks")} foot={foot}>
         <ol className="desk-tiles">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <li key={s.title} className="desk-tile is-step" style={{ ["--i" as string]: i }}>
               <span className="desk-step-n">{i + 1}</span>
               <p className="mt-3 text-[14.5px] font-medium text-ink">{s.title}</p>
@@ -82,11 +88,11 @@ export function HomeBelow({ signedIn }: { signedIn: boolean }) {
   if (todaysReview(all).deck.length > 0) return <DailyHighlight foot={foot} />;
 
   return (
-    <Desk label="Your latest highlights" aside={<DeskLink onClick={() => setUI({ shelf: "highlights" })}>{`All ${all.length}`}</DeskLink>} foot={foot}>
+    <Desk label={t("landing.desk.latest")} aside={<DeskLink onClick={() => setUI({ shelf: "highlights" })}>{t("landing.desk.all", { count: all.length })}</DeskLink>} foot={foot}>
       <ol className="desk-tiles">
         {all.slice(0, RECENT).map((h, i) => (
           <li key={h.id} style={{ ["--i" as string]: i }}>
-            <Link href={`/read/${h.articleId}?hl=${h.id}`} className="desk-tile is-quote">
+            <Link href={path(`/read/${h.articleId}?hl=${h.id}`)} className="desk-tile is-quote">
               <p className="line-clamp-3 font-serif text-[15.5px] leading-[1.5] text-ink [font-variation-settings:'opsz'_20]">
                 <span className="m-hl" data-c={h.color && h.color !== "yellow" ? h.color : undefined}>
                   {h.anchor.quote.trim()}
@@ -102,7 +108,7 @@ export function HomeBelow({ signedIn }: { signedIn: boolean }) {
         {/* Fewer than three: the room left keeps the row's shape. */}
         {all.length < RECENT && (
           <li className="desk-tile is-room" style={{ ["--i" as string]: all.length, gridColumn: `span ${RECENT - all.length}` }}>
-            Select a line in anything you read, and it waits for you here.
+            {t("landing.desk.empty")}
           </li>
         )}
       </ol>

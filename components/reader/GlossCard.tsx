@@ -10,6 +10,7 @@ import { useStore, type Gloss, type Turn } from "@/lib/store";
 import { undash } from "@/lib/article";
 import { Answer, keyLine, Sources, unmark } from "./Answer";
 import { Writing } from "./Writing";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { fmtCost, fmtTokens, useReader } from "./context";
 
 type Props = {
@@ -28,12 +29,13 @@ type Props = {
   onActivate: () => void;
 };
 
-function Receipt({ t }: { t: Turn }) {
-  if (!t.usage) return <span>{t.model}</span>;
-  const u = t.usage;
+function Receipt({ t: turn }: { t: Turn }) {
+  const { t, formatNumber } = useI18n();
+  if (!turn.usage) return <span>{turn.model}</span>;
+  const u = turn.usage;
   return (
-    <span data-tip={`${u.promptTokens.toLocaleString()} prompt tokens, ${u.cachedTokens.toLocaleString()} cached, ${u.completionTokens} written`}>
-      {t.model}
+    <span data-tip={t("reader.gloss.receipt", { prompt: formatNumber(u.promptTokens), cached: formatNumber(u.cachedTokens), written: formatNumber(u.completionTokens) })}>
+      {turn.model}
       <span className="mx-1.5 text-ink-4/70">/</span>
       {fmtTokens(u.promptTokens)} in{u.cachedTokens > 0 ? ` (${Math.round((u.cachedTokens / Math.max(1, u.promptTokens)) * 100)}% cached)` : ""}, {u.completionTokens} out
       <span className="mx-1.5 text-ink-4/70">/</span>
@@ -45,6 +47,7 @@ function Receipt({ t }: { t: Turn }) {
 
 /** Free answers are spent: the way to keep going is the reader's own key, or, signed out, signing in for more. */
 function KeyButton() {
+  const { t } = useI18n();
   return (
     <span className="mt-2.5 flex flex-wrap items-center gap-2">
       <button
@@ -52,12 +55,12 @@ function KeyButton() {
         onClick={openKeyMenu}
         className="inline-flex h-8 items-center rounded-full bg-ink px-3.5 text-[12.5px] font-medium text-bg transition-transform active:scale-[0.97]"
       >
-        Add your Together key
+        {t("reader.gloss.addKey")}
       </button>
       <Show when="signed-out">
         <SignInButton mode="modal">
           <button type="button" className="inline-flex h-8 items-center rounded-full border border-rule px-3.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-rule-strong hover:text-ink">
-            Sign in
+            {t("common.signIn")}
           </button>
         </SignInButton>
       </Show>
@@ -78,6 +81,7 @@ export function marginStyle(top: number | undefined, fresh: boolean): CSSPropert
 }
 
 function TurnBody({ t }: { t: Turn }) {
+  const { t: say } = useI18n();
   if (t.error && !t.content)
     return (
       <>
@@ -88,7 +92,7 @@ function TurnBody({ t }: { t: Turn }) {
   if (t.streaming && !t.content)
     return (
       <>
-        {t.searching && <p className="mb-2 text-[12.5px] text-ink-3">Searching the web</p>}
+        {t.searching && <p className="mb-2 text-[12.5px] text-ink-3">{say("reader.gloss.searching")}</p>}
         <Writing />
       </>
     );
@@ -103,6 +107,7 @@ function TurnBody({ t }: { t: Turn }) {
 
 export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ gloss, active, hover, entering, mini = false, variant, top, fresh = false, onActivate }, ref) {
   const { ix, jumpToBlock } = useReader();
+  const { t } = useI18n();
   const removeGloss = useStore((s) => s.removeGloss);
   const setUI = useStore((s) => s.setUI);
   const [draft, setDraft] = useState("");
@@ -116,7 +121,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
   const blockId = gloss.anchor?.start.b ?? gloss.at;
   const n = blockId ? ix.numbers.get(blockId) : undefined;
   const nEnd = gloss.anchor ? ix.numbers.get(gloss.anchor.end.b) : undefined;
-  const label = gloss.anchor ? ACTIONS[gloss.action].label : "Whole text";
+  const label = gloss.anchor ? t(`reader.actions.${gloss.action}.label`) : t("reader.gloss.wholeText");
 
   useEffect(() => {
     if (entering) {
@@ -154,7 +159,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
       <article
         ref={ref}
         data-gloss={gloss.id}
-        aria-label={`${gloss.question ?? label}${n ? `, paragraph ${n}` : ""}. Open note.`}
+        aria-label={`${gloss.question ?? label}${n ? `, paragraph ${n}` : ""}. ${t("reader.gloss.openNote")}`}
         role="button"
         tabIndex={0}
         className={["gloss is-collapsed", mini ? "is-mini" : "", hover ? "is-hover" : "", entering ? "is-entering" : ""].join(" ")}
@@ -179,7 +184,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
             )}
           </p>
           {follow > 0 && (
-            <span className="shrink-0 text-[11px] tabular-nums text-ink-4" data-tip={`${follow} follow-up${follow > 1 ? "s" : ""}`}>
+            <span className="shrink-0 text-[11px] tabular-nums text-ink-4" data-tip={t("reader.gloss.followUps", { count: follow })}>
               +{follow}
             </span>
           )}
@@ -194,7 +199,7 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
     <article
       ref={ref}
       data-gloss={gloss.id}
-      aria-label={`${label} note${n ? ` on paragraph ${n}` : ""}`}
+      aria-label={`${label} ${t("reader.gloss.note")}${n ? ` ${t("reader.gloss.onParagraph", { n })}` : ""}`}
       className={[
         variant === "margin" ? "gloss" : "gloss !relative !transform-none",
         active ? "is-active" : "",
@@ -215,18 +220,18 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
               e.stopPropagation();
               if (blockId) jumpToBlock(blockId);
             }}
-            aria-label={`Go to paragraph ${n}`}
-            data-tip="Show in the text"
+            aria-label={t("reader.gloss.goToParagraph", { n: n ?? 0 })}
+            data-tip={t("reader.gloss.showInText")}
           >
             {where}
           </button>
         )}
-        {follow > 0 && <span className="text-ink-4">{`${follow} follow-up${follow > 1 ? "s" : ""}`}</span>}
+        {follow > 0 && <span className="text-ink-4">{t("reader.gloss.followUps", { count: follow })}</span>}
         {variant === "margin" && (
           <button
             type="button"
-            aria-label="Collapse note"
-            data-tip="Collapse"
+            aria-label={t("reader.gloss.collapseNote")}
+            data-tip={t("reader.gloss.collapse")}
             data-tip-kbd="Esc"
             onClick={(e) => {
               e.stopPropagation();
@@ -268,19 +273,19 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
               <Receipt t={last.role === "assistant" ? last : first} />
             </span>
             {busy ? (
-              <IconBtn label="Stop" onClick={() => stopGloss(gloss.id)}>
+              <IconBtn label={t("reader.gloss.stop")} onClick={() => stopGloss(gloss.id)}>
                 <Square size={12} fill="currentColor" />
               </IconBtn>
             ) : (
               <>
-                <IconBtn label="Try again" onClick={() => retry(ix, gloss.id)}>
+                <IconBtn label={t("common.retry")} onClick={() => retry(ix, gloss.id)}>
                   <RotateCcw size={14} />
                 </IconBtn>
-                <IconBtn label={copied ? "Copied" : "Copy"} onClick={copy}>
+                <IconBtn label={copied ? t("reader.gloss.copied") : t("reader.gloss.copy")} onClick={copy}>
                   {copied ? <Check size={14} className="text-good" /> : <Copy size={14} />}
                 </IconBtn>
                 <IconBtn
-                  label="Delete"
+                  label={t("common.delete")}
                   onClick={() => {
                     stopGloss(gloss.id);
                     removeGloss(gloss.articleId, gloss.id);
@@ -309,15 +314,15 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
                   inputRef.current?.blur();
                 }
               }}
-              placeholder="Ask a follow-up"
-              aria-label="Ask a follow-up"
+              placeholder={t("reader.gloss.followUpPlaceholder")}
+              aria-label={t("reader.gloss.followUpPlaceholder")}
               className="h-9 min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none focus-visible:outline-none placeholder:text-ink-4"
             />
             <button
               type="submit"
               disabled={!draft.trim() || busy}
-              aria-label="Send follow-up"
-              data-tip="Send"
+              aria-label={t("reader.gloss.sendFollowUp")}
+              data-tip={t("reader.gloss.send")}
               data-tip-kbd={"\u21b5"}
               className="grid size-6 place-items-center rounded-md bg-ink text-bg transition-opacity disabled:opacity-20"
             >
@@ -332,8 +337,9 @@ export const GlossCard = forwardRef<HTMLElement, Props>(function GlossCard({ glo
 
 /** The closed note's second line: the key answer, or the pen still writing. */
 function Gist({ t }: { t: Turn }) {
+  const { t: say } = useI18n();
   if (t.error && !t.content) return <p className="mt-1 line-clamp-1 text-[13px] leading-[1.45] text-rubric-text">{t.error}</p>;
-  if (t.streaming && !t.content) return <span className="writing-line mt-2 block" aria-label="Writing" role="status" />;
+  if (t.streaming && !t.content) return <span className="writing-line mt-2 block" aria-label={say("reader.writing")} role="status" />;
   const line = keyLine(t.content);
   return line ? <p className="mt-1 line-clamp-2 text-[13px] leading-[1.45] text-ink-3">{line}</p> : null;
 }

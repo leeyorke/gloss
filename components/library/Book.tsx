@@ -1,8 +1,11 @@
 "use client";
 
+"use client";
+
 import { memo, useEffect, useState } from "react";
 import { paintedUrl } from "@/lib/covers";
 import { iconSrc, lookOf, TOPIC, topicArtSrc, type Book, type Look, type TagKey, type TopicKey } from "@/lib/library";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 /** One of the library's own emoji: a small clay figure for a topic or a tag. */
 export function Glyph({ k, size = 18, className = "" }: { k: TopicKey | TagKey; size?: number; className?: string }) {
@@ -101,6 +104,7 @@ export function Plate({ book, reveal = false }: { book: Book; reveal?: boolean }
  */
 export const Cover = memo(function Cover({ book, look = lookOf(book), draw = false }: { book: Book; look?: Look; draw?: boolean }) {
   const t = TOPIC[book.topic];
+  const { t: say } = useI18n();
   return (
     <div className="cover" data-light={look.light || undefined} style={{ background: look.color, color: look.fg }}>
       <div className="cover-plate">
@@ -109,7 +113,7 @@ export const Cover = memo(function Cover({ book, look = lookOf(book), draw = fal
       <div className="cover-type">
         <p className="cover-kicker">
           <Glyph k={t.key} size={14} className="cover-glyph" />
-          <span>{t.name}</span>
+          <span>{say(`library.topicNames.${t.key}`)}</span>
           {book.year && <span className="tabular-nums">{book.year}</span>}
         </p>
         <p className="cover-title">{book.title}</p>

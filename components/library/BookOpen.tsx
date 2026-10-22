@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, ArrowUpRight, ChevronDown, PencilLine, Star, Trash2 } from "lucide-react";
-import { fmtMinutes, hash, hostOf, lookOf, tagsOf, TOPIC, TOPICS, type Book, type TopicKey } from "@/lib/library";
+import { hash, hostOf, lookOf, tagsOf, TOPIC, TOPICS, type Book, type TopicKey } from "@/lib/library";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { Cover, Glyph, Spine } from "./Book";
 
 export type Origin = { el: HTMLElement; kind: "spine" | "cover" };
@@ -77,13 +78,14 @@ export function BookOpen({
   const [g] = useState(() => measure(book));
   const [phase, setPhase] = useState<"in" | "open" | "out" | "leaving">("in");
   const [renaming, setRenaming] = useState(false);
+  const { t, formatMinutes, formatDate } = useI18n();
   const bookRef = useRef<HTMLDivElement>(null);
   const shiftRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
   const readRef = useRef<HTMLButtonElement>(null);
   const closing = useRef(false);
   const look = lookOf(book);
-  const t = TOPIC[book.topic];
+  const tp = TOPIC[book.topic];
   const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const shift = g.wide ? g.W / 2 : 0;
   const coverZ = `translateZ(${g.D / 2}px)`;
@@ -169,7 +171,7 @@ export function BookOpen({
   const reading = book.pct > 0 && book.pct < 1;
   const host = hostOf(book.url);
   const plateNo = String((hash(book.id) % 900) + 100);
-  const shelved = new Date(book.added).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const shelved = formatDate(book.added, { day: "numeric", month: "short", year: "numeric" });
 
   return createPortal(
     <div className="ob-stage" data-phase={phase} role="dialog" aria-modal aria-label={book.title}>
@@ -199,14 +201,14 @@ export function BookOpen({
               <div className="ob-page-in scroll-thin">
                 <div className="ob-kicker">
                   {/* The topic it is shelved under, and the way to move it: one chip. */}
-                  <label className="ob-chip" style={{ ["--c" as string]: t.shades[0] }} data-tip="Move to another topic">
-                    <Glyph k={t.key} size={15} />
-                    <span>{t.name}</span>
+                  <label className="ob-chip" style={{ ["--c" as string]: tp.shades[0] }} data-tip={t("library.book.moveTopic")}>
+                    <Glyph k={tp.key} size={15} />
+                    <span>{t(`library.topicNames.${tp.key}`)}</span>
                     <ChevronDown size={13} strokeWidth={2.2} className="ob-chip-caret" aria-hidden />
-                    <select value={book.topic} onChange={(e) => onShelve(book, { topic: e.target.value as TopicKey })} aria-label="Topic">
+                    <select value={book.topic} onChange={(e) => onShelve(book, { topic: e.target.value as TopicKey })} aria-label={t("library.book.topic")}>
                       {TOPICS.map((x) => (
                         <option key={x.key} value={x.key}>
-                          {x.name}
+                          {t(`library.topicNames.${x.key}`)}
                         </option>
                       ))}
                     </select>
@@ -216,22 +218,22 @@ export function BookOpen({
                       type="button"
                       className="ob-icon"
                       aria-pressed={book.favorite}
-                      aria-label={book.favorite ? "Remove from favourites" : "Add to favourites"}
-                      data-tip={book.favorite ? "Favourite" : "Add to favourites"}
+                      aria-label={book.favorite ? t("library.book.removeFavourite") : t("library.book.addFavourite")}
+                      data-tip={book.favorite ? t("library.book.favourite") : t("library.book.addFavourite")}
                       onClick={() => onShelve(book, { favorite: !book.favorite })}
                     >
                       <Star size={15} fill={book.favorite ? "currentColor" : "none"} />
                     </button>
                     {!book.sample && (
-                      <button type="button" className="ob-icon" aria-label="Rename" data-tip="Rename" onClick={() => setRenaming(true)}>
+                      <button type="button" className="ob-icon" aria-label={t("library.book.rename")} data-tip={t("library.book.rename")} onClick={() => setRenaming(true)}>
                         <PencilLine size={14} />
                       </button>
                     )}
                     <button
                       type="button"
                       className="ob-icon"
-                      aria-label={book.sample ? "Remove this sample" : "Remove from the library"}
-                      data-tip={book.sample ? "Remove this sample" : "Remove from the library"}
+                      aria-label={book.sample ? t("library.book.removeSample") : t("library.book.removeFromLibrary")}
+                      data-tip={book.sample ? t("library.book.removeSample") : t("library.book.removeFromLibrary")}
                       onClick={() => onRemove(book)}
                     >
                       <Trash2 size={14} />
@@ -250,7 +252,7 @@ export function BookOpen({
                   <h2 className="ob-title">{book.title}</h2>
                 ) : (
                   <h2 className="ob-title">
-                    <button type="button" className="ob-title-btn" data-tip="Rename" onClick={() => setRenaming(true)}>
+                    <button type="button" className="ob-title-btn" data-tip={t("library.book.rename")} onClick={() => setRenaming(true)}>
                       {book.title}
                     </button>
                   </h2>
@@ -259,7 +261,7 @@ export function BookOpen({
                   {book.author}
                   <span className="ob-meta">
                     {book.year ? `${book.year} · ` : ""}
-                    {fmtMinutes(book.minutes)}
+                    {formatMinutes(book.minutes)}
                   </span>
                 </p>
                 {book.dek && <p className="ob-dek">{book.dek}</p>}
@@ -267,15 +269,15 @@ export function BookOpen({
                   <p className="ob-tags">
                     {tagsOf(book).map((x) => (
                       <span key={x.key}>
-                        <Glyph k={x.key} size={15} /> {x.label}
+                        <Glyph k={x.key} size={15} /> {t(`library.tags.${x.key}`)}
                       </span>
                     ))}
                     {book.agent && (
                       <span>
-                        <Glyph k="agent" size={15} /> Shelved by your agent
+                        <Glyph k="agent" size={15} /> {t("library.book.shelvedByAgent")}
                       </span>
                     )}
-                    {book.sample && <span className="is-word">a sample from Gloss</span>}
+                    {book.sample && <span className="is-word">{t("library.book.sample")}</span>}
                     {book.tags.map((x) => (
                       <span key={x} className="is-word">
                         {x}
@@ -288,13 +290,13 @@ export function BookOpen({
                     <span style={{ width: `${Math.round(book.pct * 100)}%` }} />
                   </span>
                   <span>
-                    {book.pct >= 1 ? "Read" : reading ? `${Math.round(book.pct * 100)}% read` : "Not started"}
-                    {book.highlights > 0 && ` · ${book.highlights} highlight${book.highlights === 1 ? "" : "s"}`}
+                    {book.pct >= 1 ? t("library.book.read") : reading ? t("library.book.percentRead", { percent: Math.round(book.pct * 100) }) : t("library.book.notStarted")}
+                    {book.highlights > 0 && ` · ${t("library.book.highlights", { count: book.highlights })}`}
                   </span>
                 </div>
                 <div className="ob-actions">
                   <button ref={readRef} type="button" onClick={read} className="ob-read">
-                    {book.pct >= 1 ? "Read again" : reading ? "Continue reading" : "Start reading"}
+                    {book.pct >= 1 ? t("library.book.readAgain") : reading ? t("library.book.continueReading") : t("library.book.startReading")}
                     <ArrowRight size={16} />
                   </button>
                   <div className="ob-sub">
@@ -306,7 +308,7 @@ export function BookOpen({
                       <span />
                     )}
                     <button type="button" onClick={close} className="ob-link">
-                      Put it back <kbd>Esc</kbd>
+                      {t("library.book.putBack")} <kbd>Esc</kbd>
                     </button>
                   </div>
                 </div>
@@ -318,17 +320,17 @@ export function BookOpen({
               <div className="ob-face ob-cover-front">
                 <Cover book={book} look={look} draw />
               </div>
-              <div className="ob-face ob-cover-inside" style={{ ["--c" as string]: look.color, ["--c2" as string]: t.shades[3] }}>
+              <div className="ob-face ob-cover-inside" style={{ ["--c" as string]: look.color, ["--c2" as string]: tp.shades[3] }}>
                 {/* A bookplate pasted inside the cover: whose it is, and when it was shelved. */}
                 <div className="ex-libris">
                   <div className="ex-art">
-                    <Glyph k={t.key} size={60} />
+                    <Glyph k={tp.key} size={60} />
                   </div>
-                  <p className="ex-head">From the library of</p>
+                  <p className="ex-head">{t("library.book.fromLibraryOf")}</p>
                   <p className="ex-name">{owner}</p>
                   <span className="ex-rule" aria-hidden />
                   <p className="ex-meta">
-                    No. {plateNo}
+                    {t("library.book.plate", { number: plateNo })}
                     {book.added ? ` · ${shelved}` : ""}
                   </p>
                 </div>
@@ -344,6 +346,7 @@ export function BookOpen({
 
 /** The title, as a field: Enter or leaving it keeps the new name, Esc keeps the old one. */
 function TitleField({ title, onDone }: { title: string; onDone: (title: string | null) => void }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLTextAreaElement>(null);
   const done = useRef(false);
   const finish = (v: string | null) => {
@@ -364,7 +367,7 @@ function TitleField({ title, onDone }: { title: string; onDone: (title: string |
       className="ob-title ob-title-field"
       defaultValue={title}
       rows={1}
-      aria-label="Title"
+      aria-label={t("library.book.title")}
       spellCheck={false}
       onKeyDown={(e) => {
         if (e.key === "Enter") {

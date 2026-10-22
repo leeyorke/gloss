@@ -17,9 +17,11 @@ import { ImportBar, type Busy } from "./ImportBar";
 import { PasteSheet } from "./PasteSheet";
 import { LibraryLine, type Saved } from "./LibraryLine";
 import { ShelfSheet, type ShelfItem } from "./ShelfSheet";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 /** One screen: a headline that shows what it does, a place to paste, and your shelf. */
 export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boolean }) {
+  const { t, path } = useI18n();
   const router = useRouter();
   // Known on the server at load, so a signed-in reader never sees the demo flash; then live, for a sign-in from this page.
   const { isLoaded, isSignedIn } = useAuth();
@@ -54,9 +56,9 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
   const go = useCallback(
     (id: string, hl?: string) => {
       setLeaving(true);
-      setTimeout(() => router.push(`/read/${id}${hl ? `?hl=${hl}` : ""}`), 240);
+      setTimeout(() => router.push(path(`/read/${id}${hl ? `?hl=${hl}` : ""}`)), 240);
     },
-    [router]
+    [router, path]
   );
 
   const finish = useCallback(
@@ -81,9 +83,9 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
       try {
         host = new URL(/^https?:/i.test(host) ? host : `https://${host}`).hostname.replace(/^www\./, "");
       } catch {}
-      setBusy({ label: `${later ? "Saving" : "Reading"} ${host}` });
+      setBusy({ label: t(later ? "landing.busy.saving" : "landing.busy.reading", { host }) });
       // A link to a PDF is read here in the browser, with its progress in the bar.
-      const r = await importFromUrl(raw, (p, label) => setBusy({ label: label ?? `Reading ${host}`, pct: p }));
+      const r = await importFromUrl(raw, (p, label) => setBusy({ label: label ?? t("landing.busy.reading", { host }), pct: p }));
       if (!r.ok) {
         setError(r.error);
         setErrorNeedsKey(Boolean(r.needKey));
@@ -97,7 +99,7 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
       setUrl("");
       setSaved({ id: r.article.id, title: r.article.title });
     },
-    [finish]
+    [finish, t]
   );
 
   // A link handed in from elsewhere, by the bookmarklet or a share: /?url=… opens it, /?save=… shelves it for later.
@@ -110,21 +112,21 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
     const raw = (q.get("save") ?? q.get("url") ?? "").trim();
     if (!raw) return;
     // Off the address bar, so a reload or a shared screenshot does not import it again.
-    window.history.replaceState(null, "", "/");
-    if (!looksLikeUrl(raw)) return setError("That does not look like a link.");
+    window.history.replaceState(null, "", path("/"));
+    if (!looksLikeUrl(raw)) return setError(t("landing.errors.notALink"));
     const known = useStore.getState().library.find((x) => x.sourceUrl && normalizeUrl(x.sourceUrl) === normalizeUrl(raw));
     if (known) return later ? setSaved({ id: known.id, title: known.title }) : go(known.id);
     setUrl(raw);
     void fromUrl(raw, later);
-  }, [hydrated, fromUrl, go]);
+  }, [hydrated, fromUrl, go, t, path]);
 
   const fromFile = useCallback(
     async (f: File) => {
       setError(null);
       setErrorNeedsKey(false);
-      setBusy({ label: `Opening ${f.name}`, pct: f.name.toLowerCase().endsWith(".pdf") ? 0 : undefined });
+      setBusy({ label: t("landing.busy.opening", { name: f.name }), pct: f.name.toLowerCase().endsWith(".pdf") ? 0 : undefined });
       // The PDF reader reports what it is doing: "Reading 12 pages", then any scanned ones.
-      const r = await importFromFile(f, (p, label) => setBusy({ label: label ?? `Reading ${f.name}`, pct: p }));
+      const r = await importFromFile(f, (p, label) => setBusy({ label: label ?? t("landing.busy.reading", { host: f.name }), pct: p }));
       if (r.ok) finish(r.article, r.file);
       else {
         setError(r.error);
@@ -132,7 +134,7 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
         setBusy(null);
       }
     },
-    [finish]
+    [finish, t]
   );
 
   const fromText = useCallback(
@@ -209,7 +211,7 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
     const mine = library.map((x) => ({
       id: x.id,
       title: x.title,
-      byline: x.author || x.source || (x.origin === "paste" ? "Pasted text" : "Imported"),
+      byline: x.author || x.source || (x.origin === "paste" ? t("landing.byline.pasted") : t("landing.byline.imported")),
       words: x.words,
       pct: p(x.id),
       glosses: g(x.id),
@@ -281,8 +283,8 @@ export function Landing({ signedIn: signedInAtLoad = false }: { signedIn?: boole
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-bg/80 backdrop-blur-sm" style={{ animation: "fade 0.15s" }}>
           <div className="rounded-[28px] border-[1.5px] border-dashed border-[var(--rubric)] px-16 py-14 text-center">
-            <p className="font-serif text-[40px] leading-none text-ink">Drop to read</p>
-            <p className="mt-3 text-[14px] text-ink-3">PDF, .txt or .md</p>
+            <p className="font-serif text-[40px] leading-none text-ink">{t("landing.drop.title")}</p>
+            <p className="mt-3 text-[14px] text-ink-3">{t("landing.drop.hint")}</p>
           </div>
         </div>
       )}

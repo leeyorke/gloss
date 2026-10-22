@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, BadgeCheck, BookA, Check, Copy, Ellipsis, Eraser, Feather, Highlighter, Lightbulb, PenLine, Scale, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowUp, BadgeCheck, BookA, Check, Copy, Ellipsis, Eraser, Feather, Highlighter, Lightbulb, PenLine, Scale, Square, Volume2, Waypoints, type LucideIcon } from "lucide-react";
 import { ACTIONS, isShortSelection, type Action } from "@/lib/actions";
 import { MARKERS, type Marker } from "@/lib/settings";
 import { anchorToRange, selectionToAnchor } from "@/lib/anchor";
 import { startGloss } from "@/lib/ask";
 import { uid, useStore, type Anchor } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { useReader } from "./context";
+import { speakAloud, stopSpeaking, useSpeak } from "./Speak";
 import { WebSwitch } from "./WebSwitch";
 
 type LensState = {
@@ -27,9 +30,9 @@ const ICONS: Partial<Record<Action, LucideIcon>> = {
 };
 
 /** Questions people reach for, offered while the box is still empty. */
-const STARTERS = {
-  word: ["Why this word here?", "Where does it come from?", "Use it in a sentence"],
-  passage: ["Give me an example", "Why does it matter?", "What is the evidence?"],
+const STARTER_KEYS: Record<"word" | "passage", TranslationKey[]> = {
+  word: ["reader.lens.starters.word.one", "reader.lens.starters.word.two", "reader.lens.starters.word.three"],
+  passage: ["reader.lens.starters.passage.one", "reader.lens.starters.passage.two", "reader.lens.starters.passage.three"],
 };
 
 /**
@@ -40,6 +43,7 @@ export type OpenHighlight = { id: string; anchor: Anchor; at: number; note?: boo
 
 export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; openHighlight: OpenHighlight | null }) {
   const { ix } = useReader();
+  const { t } = useI18n();
   const [lens, setLens] = useState<LensState | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number; below: boolean; arrow: number; docked: boolean } | null>(null);
   const [draft, setDraft] = useState("");
@@ -48,6 +52,8 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
   const marker = useStore((s) => s.settings.marker);
   const setSettings = useStore((s) => s.setSettings);
   const updateHighlight = useStore((s) => s.updateHighlight);
+  const speaking = useSpeak((s) => s.speaking);
+  const speakError = useSpeak((s) => s.error);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -274,6 +280,14 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
     return () => window.removeEventListener("keydown", onKey, true);
   }, [lens, menu, close, toAsk]);
 
+  // The words of the page, for the parts of the voice that live outside React.
+  useEffect(() => {
+    useSpeak.setState({ t });
+  }, [t]);
+
+  // Leaving the text stops the voice.
+  useEffect(() => () => stopSpeaking(), [ix]);
+
   if (!lens) return null;
 
   const run = (action: Action, question?: string) => {
@@ -286,6 +300,9 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
   const more: Action[] = [short ? "simplify" : "define", "check", "connect", "counter"];
   const existing = lens.highlightId ? useStore.getState().highlights[ix.article.id]?.find((h) => h.id === lens.highlightId) : undefined;
   const markerColor = MARKERS.find((m) => m.key === marker)?.color;
+  // What the voice button says: what it is about to do, or what went wrong.
+  const speakLabel = speakError ?? (speaking ? t("reader.lens.speakStop") : t("reader.lens.speak"));
+  const speakHint = speakError || speaking ? undefined : t("reader.lens.speakHint");
 
   // Captions open on the side away from the text, so they never cover what was selected.
   const tipProps = (label: string, hint?: string) => ({
@@ -316,7 +333,7 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
   const style = pos ? { left: pos.x, top: pos.y } : { left: -9999, top: -9999 };
   // Captions and the menu open on the side away from the text.
   const outside = pos?.below ? "top-[calc(100%+8px)]" : "bottom-[calc(100%+8px)]";
-  const starters = short ? STARTERS.word : STARTERS.passage;
+  const starters = STARTER_KEYS[short ? "word" : "passage"].map((k) => t(k));
 
   return (
     <div
@@ -366,18 +383,18 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                   close();
                 }
               }}
-              placeholder={existing ? "A note on this highlight" : "A note, in your own words"}
-              aria-label="Your note on the selected passage"
+              placeholder={existing ? t("reader.lens.noteOnHighlight") : t("reader.lens.notePlaceholder")}
+              aria-label={t("reader.lens.noteLabel")}
               className="block max-h-[168px] min-h-8 w-full resize-none bg-transparent px-3 pt-[7px] font-serif text-[15px] leading-[1.45] text-lens-fg outline-none focus-visible:outline-none placeholder:text-lens-mute"
             />
             <div className="flex items-center justify-between gap-3 pb-0.5 pl-3 pr-0.5 pt-1">
               <span className="text-[11.5px] text-lens-mute">
-                {"\u21b5"} to keep <span className="opacity-60">{"\u00b7"}</span> Shift {"\u21b5"} new line
+                {"\u21b5"} {t("reader.lens.keepHint")} <span className="opacity-60">{"\u00b7"}</span> Shift {"\u21b5"} {t("reader.lens.newLine")}
               </span>
               <button
                 type="submit"
-                aria-label="Keep note"
-                data-tip="Keep"
+                aria-label={t("reader.lens.keepNote")}
+                data-tip={t("reader.lens.keep")}
                 data-tip-kbd={"\u21b5"}
                 className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-[var(--rubric)] text-white transition-transform active:scale-90"
               >
@@ -390,28 +407,28 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
             <button
               type="button"
               onClick={() => toAsk("")}
-              {...tipProps("Ask", "Or just start typing")}
+              {...tipProps(t("reader.lens.ask"), t("reader.lens.askHint"))}
               className="lens-btn group gap-2 pl-3 pr-2.5 font-medium"
             >
-              Ask
+              {t("reader.lens.ask")}
               <span className="lens-caret" aria-hidden />
             </button>
             <span className="mx-[3px] h-4 w-px shrink-0 bg-lens-mute/30" aria-hidden />
             {primary.map((a) => {
               const Icon = ICONS[a]!;
               return (
-                <button key={a} type="button" onClick={() => run(a)} {...tipProps(ACTIONS[a].label, ACTIONS[a].hint)} className="lens-btn group gap-1.5 pl-2.5 pr-3">
+                <button key={a} type="button" onClick={() => run(a)} {...tipProps(t(`reader.actions.${a}.label`), t(`reader.actions.${a}.hint`))} className="lens-btn group gap-1.5 pl-2.5 pr-3">
                   <Icon size={15} strokeWidth={1.9} className="text-lens-mute transition-colors group-hover:text-lens-fg" aria-hidden />
-                  {ACTIONS[a].label}
+                  {t(`reader.actions.${a}.label`)}
                 </button>
               );
             })}
             <button
               type="button"
-              aria-label="More actions"
+              aria-label={t("reader.lens.moreActions")}
               aria-expanded={menu}
               onClick={() => setMenu((v) => !v)}
-              {...tipProps("More", existing ? "Fact-check, related, copy" : "Fact-check, counterpoint, copy")}
+              {...tipProps(t("reader.lens.more"), existing ? t("reader.lens.moreExisting") : t("reader.lens.moreNew"))}
               className={`lens-btn w-8 justify-center ${menu ? "bg-lens-hover" : ""}`}
             >
               <Ellipsis size={16} />
@@ -420,14 +437,14 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
 
             {existing ? (
               <>
-                <div className="flex items-center gap-2 px-2" role="radiogroup" aria-label="Highlight colour">
+                <div className="flex items-center gap-2 px-2" role="radiogroup" aria-label={t("reader.lens.highlightColour")}>
                   {MARKERS.map((m) => (
                     <button
                       key={m.key}
                       type="button"
                       role="radio"
                       aria-checked={(existing.color ?? "yellow") === m.key}
-                      aria-label={`${m.label} highlight`}
+                      aria-label={t("reader.lens.colourHighlight", { colour: m.label })}
                       onClick={() => highlight(m.key)}
                       {...tipProps(m.label)}
                       className={`lens-dot ${(existing.color ?? "yellow") === m.key ? "is-on" : ""}`}
@@ -435,12 +452,12 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                     />
                   ))}
                 </div>
-                <LensIcon label={existing.note ? "Edit note" : "Add a note"} tip={tipProps(existing.note ? "Edit note" : "Add a note", existing.note ? undefined : "In your own words")} onClick={toNote}>
+                <LensIcon label={existing.note ? t("reader.lens.editNote") : t("reader.lens.addNote")} tip={tipProps(existing.note ? t("reader.lens.editNote") : t("reader.lens.addNote"), existing.note ? undefined : t("reader.lens.inYourOwnWords"))} onClick={toNote}>
                   <PenLine size={15} />
                 </LensIcon>
                 <LensIcon
-                  label="Remove highlight"
-                  tip={tipProps("Remove highlight")}
+                  label={t("reader.lens.removeHighlight")}
+                  tip={tipProps(t("reader.lens.removeHighlight"))}
                   onClick={() => {
                     removeHighlight(ix.article.id, lens.highlightId!);
                     close();
@@ -451,7 +468,7 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
               </>
             ) : (
               <div className="group/hl flex items-center">
-                <LensIcon label="Highlight" tip={tipProps("Highlight", "Hover for colours")} onClick={() => highlight(marker)}>
+                <LensIcon label={t("reader.lens.highlight")} tip={tipProps(t("reader.lens.highlight"), t("reader.lens.hoverColours"))} onClick={() => highlight(marker)}>
                   <span className="relative">
                     <Highlighter size={15} />
                     <span aria-hidden className="absolute -bottom-[3px] -right-[3px] size-[7px] rounded-full ring-2 ring-[var(--lens-bg)]" style={{ background: markerColor }} />
@@ -464,7 +481,7 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                     <button
                       key={m.key}
                       type="button"
-                      aria-label={`Highlight in ${m.label.toLowerCase()}`}
+                      aria-label={t("reader.lens.highlightIn", { colour: m.label })}
                       onClick={() => highlight(m.key)}
                       {...tipProps(m.label)}
                       className={`lens-dot ${m.key === marker ? "is-on" : ""}`}
@@ -475,9 +492,17 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                 </div>
               </div>
             )}
+            {/* Reads the passage: the one just selected, or the one already highlighted. */}
+            <LensIcon
+              label={speakLabel}
+              tip={tipProps(speakLabel, speakHint)}
+              onClick={() => (speaking ? stopSpeaking() : speakAloud(lens.anchor.quote))}
+            >
+              {speaking ? <Square size={12} fill="currentColor" strokeWidth={0} /> : <Volume2 size={15} />}
+            </LensIcon>
             {/* Beside Highlight, outside its hover group, so reaching for it does not open the colours. */}
             {!existing && (
-              <LensIcon label="Add a note" tip={tipProps("Add a note", "In your own words")} onClick={toNote}>
+              <LensIcon label={t("reader.lens.addNote")} tip={tipProps(t("reader.lens.addNote"), t("reader.lens.inYourOwnWords"))} onClick={toNote}>
                 <PenLine size={15} />
               </LensIcon>
             )}
@@ -503,16 +528,16 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                     close();
                   }
                 }}
-                placeholder={short ? "Ask about this word" : "Ask about this passage"}
-                aria-label="Your question about the selected passage"
+                placeholder={short ? t("reader.lens.askAboutWord") : t("reader.lens.askAboutPassage")}
+                aria-label={t("reader.lens.questionLabel")}
                 className="h-8 min-w-0 flex-1 bg-transparent text-[14px] text-lens-fg outline-none focus-visible:outline-none placeholder:text-lens-mute"
               />
               <WebSwitch tone="lens" />
               <button
                 type="submit"
                 disabled={!draft.trim()}
-                aria-label="Ask"
-                data-tip="Ask"
+                aria-label={t("reader.lens.ask")}
+                data-tip={t("reader.lens.ask")}
                 data-tip-kbd={"\u21b5"}
                 className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--rubric)] text-white transition-[opacity,transform] active:scale-90 disabled:opacity-30"
               >
@@ -545,7 +570,7 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
         )}
 
         {menu && lens.mode === "actions" && (
-          <div role="menu" aria-label="More actions" className={`lens-menu absolute right-0 ${outside} w-[264px] rounded-[14px] bg-lens p-1 text-lens-fg shadow-pop ring-1 ring-black/5`}>
+          <div role="menu" aria-label={t("reader.lens.moreActions")} className={`lens-menu absolute right-0 ${outside} w-[264px] rounded-[14px] bg-lens p-1 text-lens-fg shadow-pop ring-1 ring-black/5`}>
             {more.map((a, i) => {
               const Icon = ICONS[a]!;
               return (
@@ -559,8 +584,8 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                 >
                   <Icon size={16} strokeWidth={1.9} className="mt-[1px] shrink-0 text-lens-mute transition-colors group-hover:text-[var(--rubric)]" aria-hidden />
                   <span className="min-w-0">
-                    <span className="block text-[13px] font-medium leading-tight">{ACTIONS[a].label}</span>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-lens-mute">{ACTIONS[a].hint}</span>
+                    <span className="block text-[13px] font-medium leading-tight">{t(`reader.actions.${a}.label`)}</span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-lens-mute">{t(`reader.actions.${a}.hint`)}</span>
                   </span>
                 </button>
               );
@@ -582,8 +607,8 @@ export function Lens({ rootEl, openHighlight }: { rootEl: HTMLElement | null; op
                 <Copy size={16} strokeWidth={1.9} className="mt-[1px] shrink-0 text-lens-mute transition-colors group-hover:text-[var(--rubric)]" aria-hidden />
               )}
               <span className="min-w-0">
-                <span className="block text-[13px] font-medium leading-tight">{copied ? "Copied" : "Copy quote"}</span>
-                <span className="mt-0.5 block text-[12px] leading-snug text-lens-mute">With the title and paragraph number</span>
+                <span className="block text-[13px] font-medium leading-tight">{copied ? t("reader.gloss.copied") : t("reader.lens.copyQuote")}</span>
+                <span className="mt-0.5 block text-[12px] leading-snug text-lens-mute">{t("reader.lens.copyHint")}</span>
               </span>
             </button>
           </div>

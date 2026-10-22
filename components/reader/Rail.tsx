@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useGlosses, useHighlights, useStore } from "@/lib/store";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { useReader } from "./context";
 
 type Geo = { docTop: number; docH: number; blocks: { id: string; top: number; h: number; heading: boolean; fill: number }[] };
@@ -13,6 +14,7 @@ type Geo = { docTop: number; docH: number; blocks: { id: string; top: number; h:
  */
 export function Rail({ articleEl }: { articleEl: HTMLElement | null }) {
   const { ix } = useReader();
+  const { t } = useI18n();
   const glosses = useGlosses(ix.article.id);
   const highlights = useHighlights(ix.article.id);
   const brief = useStore((s) => s.briefs[ix.article.id]);
@@ -100,7 +102,7 @@ export function Rail({ articleEl }: { articleEl: HTMLElement | null }) {
     <div
       ref={railRef}
       role="slider"
-      aria-label="Position in the text"
+      aria-label={t("reader.rail")}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(Math.max(0, Math.min(1, (view.top + view.h * 0.3) / geo.docH)) * 100)}
