@@ -2,10 +2,14 @@
  * A painted cover for one text, on the server: the scene the classifier
  * wrote, as a two-colour risograph print in its topic's inks. The title is
  * never in the prompt, or the model letters it onto the picture.
+ *
+ * Dormant for now: the picture was drawn by an image model on Together, and
+ * OpenRouter has no free one that does this work. The route that calls this
+ * says so rather than drawing.
  */
 
 import { TOPIC, type TopicKey } from "./library";
-import { APP_UA } from "./together";
+import { APP_UA } from "./openrouter";
 
 const MODEL = "black-forest-labs/FLUX.2-dev";
 const SIZE = 640;

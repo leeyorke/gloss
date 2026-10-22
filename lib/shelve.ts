@@ -7,7 +7,7 @@
 
 import { cleanTags, TOPICS, topicOf, type Shelving } from "./library";
 import { EXCERPT_CHARS } from "./excerpt";
-import { completeJSON, DEFAULT_MODEL } from "./together";
+import { completeJSON, recommendedChain } from "./openrouter";
 
 export type ShelveInput = { title: string; author?: string; source?: string; dek?: string; excerpt?: string };
 
@@ -36,7 +36,7 @@ export async function classify(
     input.excerpt && `Opening:\n${input.excerpt.slice(0, EXCERPT_CHARS)}`,
   ].filter(Boolean);
   const r = await completeJSON<{ topic?: unknown; tags?: unknown; scene?: unknown }>({
-    model: DEFAULT_MODEL,
+    models: await recommendedChain(),
     apiKey: opts.apiKey,
     signal: opts.signal,
     maxTokens: 220,

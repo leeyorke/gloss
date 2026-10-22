@@ -7,12 +7,12 @@ import { BRAND } from "@/lib/brand";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { Popover, barBtn } from "./Popover";
 
-const STORAGE_KEY = "together:api-key";
+const STORAGE_KEY = "openrouter:api-key";
 
 /** Today's free use of the shared key, as the share still unspent (0 to 1). */
 type Free = { left: number; signedIn: boolean };
 
-/** Bring your own Together key. Stored in this browser only. A little reading a day is free without one. */
+/** Bring your own OpenRouter key. Stored in this browser only. A little reading a day is free without one. */
 export function KeyMenu() {
   const { t } = useI18n();
   const [key, setKey] = useState("");
@@ -116,7 +116,7 @@ function KeyPanel({ current, house, free, onSave, close }: { current: string; ho
           setState("idle");
         }}
         onKeyDown={(e) => e.key === "Enter" && save()}
-        placeholder="tgp_v1_..."
+        placeholder="sk-or-v1-..."
         autoComplete="off"
         spellCheck={false}
         aria-label={t("key.label")}

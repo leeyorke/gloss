@@ -2,12 +2,12 @@
 
 import type { Action } from "./actions";
 import type { BriefData } from "./article";
+import { modelLabel } from "./catalogue-client";
 import { docPayload, type DocIndex } from "./doc";
 import { uid, useStore, type Anchor, type Gloss, type Turn } from "./store";
-import type { ModelKey, StreamEvent, Usage } from "./models";
-import { MODELS, modelOf } from "./models";
+import type { ModelId, StreamEvent, Usage } from "./models";
 
-const KEY_STORAGE = "together:api-key";
+const KEY_STORAGE = "openrouter:api-key";
 
 export function readApiKey(): string {
   try {
@@ -36,7 +36,7 @@ function lastAssistant(g: Gloss, fn: (t: Turn) => Turn): Gloss {
 }
 
 /** Streams the newest assistant turn of a gloss from /api/ask. */
-async function stream(ix: DocIndex, glossId: string, modelKey: ModelKey) {
+async function stream(ix: DocIndex, glossId: string, models: ModelId[]) {
   const st = useStore.getState();
   const articleId = ix.article.id;
   const g = (st.glosses[articleId] ?? []).find((x) => x.id === glossId);
@@ -64,7 +64,7 @@ async function stream(ix: DocIndex, glossId: string, modelKey: ModelKey) {
       signal: ctrl.signal,
       body: JSON.stringify({
         apiKey: apiKey || undefined,
-        model: modelKey,
+        models,
         length: st.settings.length,
         doc: docPayload(ix, g.anchor?.start.b ?? g.at),
         thread: { action: g.action, quote: g.anchor?.quote, from, to, at, question: g.question },
@@ -108,7 +108,7 @@ async function stream(ix: DocIndex, glossId: string, modelKey: ModelKey) {
           // Batch tokens into animation frames so a fast model never janks the page.
           pending += e.text;
           if (!raf) raf = requestAnimationFrame(flush);
-        } else if (e.type === "meta") update((t) => ({ ...t, model: e.model }));
+        } else if (e.type === "meta") update((t) => ({ ...t, model: e.model, modelId: e.modelId }));
         else if (e.type === "reset") {
           // A line written before a web search ("Let me look that up") gives way to the answer.
           pending = "";
@@ -135,10 +135,10 @@ async function stream(ix: DocIndex, glossId: string, modelKey: ModelKey) {
 
 export function startGloss(
   ix: DocIndex,
-  opts: { anchor?: Anchor; at?: string; action: Action; question?: string; modelKey?: ModelKey }
+  opts: { anchor?: Anchor; at?: string; action: Action; question?: string; models?: ModelId[] }
 ): string {
   const st = useStore.getState();
-  const modelKey = modelOf(opts.modelKey ?? st.settings.model);
+  const models = opts.models ?? st.settings.models;
   // The answer is written in the margin, which focus mode hides: step out of it.
   if (st.focusMode) st.setUI({ focusMode: false });
   const g: Gloss = {
@@ -149,52 +149,52 @@ export function startGloss(
     action: opts.action,
     question: opts.question,
     createdAt: Date.now(),
-    turns: [{ role: "assistant", content: "", streaming: true, modelKey, model: MODELS[modelKey].label }],
+    turns: [{ role: "assistant", content: "", streaming: true, modelId: models[0], model: models[0] ? modelLabel(models[0]) : "" }],
   };
   st.addGloss(g);
-  void stream(ix, g.id, modelKey);
+  void stream(ix, g.id, models);
   return g.id;
 }
 
-export function followUp(ix: DocIndex, glossId: string, question: string, modelKey?: ModelKey) {
+export function followUp(ix: DocIndex, glossId: string, question: string, models?: ModelId[]) {
   const st = useStore.getState();
-  const mk = modelOf(modelKey ?? st.settings.model);
+  const chain = models ?? st.settings.models;
   st.updateGloss(ix.article.id, glossId, (g) => ({
     ...g,
     turns: [
       ...g.turns,
       { role: "user", content: question },
-      { role: "assistant", content: "", streaming: true, modelKey: mk, model: MODELS[mk].label },
+      { role: "assistant", content: "", streaming: true, modelId: chain[0], model: chain[0] ? modelLabel(chain[0]) : "" },
     ],
   }));
-  void stream(ix, glossId, mk);
+  void stream(ix, glossId, chain);
 }
 
-/** Re-runs the latest answer, optionally on a different model. */
-export function retry(ix: DocIndex, glossId: string, modelKey?: ModelKey) {
+/** Re-runs the latest answer, on the same models. */
+export function retry(ix: DocIndex, glossId: string, models?: ModelId[]) {
   const st = useStore.getState();
-  const mk = modelOf(modelKey ?? st.settings.model);
+  const chain = models ?? st.settings.models;
   st.updateGloss(ix.article.id, glossId, (g) =>
-    lastAssistant(g, () => ({ role: "assistant", content: "", streaming: true, modelKey: mk, model: MODELS[mk].label }))
+    lastAssistant(g, () => ({ role: "assistant", content: "", streaming: true, modelId: chain[0], model: chain[0] ? modelLabel(chain[0]) : "" }))
   );
-  void stream(ix, glossId, mk);
+  void stream(ix, glossId, chain);
 }
 
 export async function fetchBrief(ix: DocIndex) {
   const st = useStore.getState();
   const id = ix.article.id;
-  const modelKey = modelOf(st.settings.model);
+  const models = st.settings.models;
   st.setBrief(id, { status: "loading" });
   try {
     const apiKey = readApiKey();
     const res = await fetch("/api/brief", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: apiKey || undefined, model: modelKey, doc: docPayload(ix) }),
+      body: JSON.stringify({ apiKey: apiKey || undefined, models, doc: docPayload(ix) }),
     });
     noteFree(res);
-    const j = (await res.json()) as { brief?: BriefData; usage?: Usage; error?: string; code?: string };
-    if (j.brief) useStore.getState().setBrief(id, { status: "ready", data: j.brief, usage: j.usage, modelKey, at: Date.now() });
+    const j = (await res.json()) as { brief?: BriefData; usage?: Usage; modelId?: string; error?: string; code?: string };
+    if (j.brief) useStore.getState().setBrief(id, { status: "ready", data: j.brief, usage: j.usage, modelId: j.modelId ?? models[0], at: Date.now() });
     else useStore.getState().setBrief(id, { status: "error", error: j.error ?? "Could not write the gloss.", needKey: j.code === "need_key" });
   } catch (e) {
     useStore.getState().setBrief(id, { status: "error", error: `Connection lost: ${String(e)}` });
@@ -247,7 +247,7 @@ export async function streamAsk(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
-      body: JSON.stringify({ ...body, apiKey: apiKey || undefined, model: modelOf(useStore.getState().settings.model) }),
+      body: JSON.stringify({ ...body, apiKey: apiKey || undefined, models: useStore.getState().settings.models }),
     });
     noteFree(res);
     if (!res.ok || !res.body) {

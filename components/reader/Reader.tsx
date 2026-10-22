@@ -560,9 +560,9 @@ function ReaderInner({ article }: { article: Article }) {
                 </p>
                 {article.source && <p>From {article.source}.</p>}
                 <p className="mt-1">
-                  Glosses are powered by DeepSeek V4.1 Flash, served by{" "}
-                  <a href={BRAND.togetherUrl} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline decoration-rule-strong underline-offset-4 hover:text-ink">
-                    Together AI
+                  Glosses are answered by the free models on{" "}
+                  <a href={BRAND.openrouterUrl} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline decoration-rule-strong underline-offset-4 hover:text-ink">
+                    OpenRouter
                   </a>
                   .
                 </p>

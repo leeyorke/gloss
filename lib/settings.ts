@@ -1,4 +1,4 @@
-import type { ModelKey } from "./models";
+import type { ModelId } from "./models";
 
 /** Highlighter colours. */
 export type Marker = "yellow" | "green" | "blue" | "pink";
@@ -29,7 +29,11 @@ export type Settings = {
   paras: "spaced" | "indented";
   marker: Marker;
   length: "short" | "normal" | "long";
-  model: ModelKey;
+  /**
+   * The models answers come from, in order. The first one answers; the ones
+   * behind it are fallbacks, asked when the one before cannot.
+   */
+  models: ModelId[];
   /**
    * Let answers look things up on the web: the model gets a search tool and decides when to use it.
    * On by default. (It replaced "web", an opt-in toggle, so older saved settings start on.)
@@ -52,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   paras: "spaced",
   marker: "yellow",
   length: "normal",
-  model: "flash",
+  models: [],
   search: true,
   numbers: false,
   rail: true,

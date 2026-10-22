@@ -1,14 +1,13 @@
 import { BRIEF_TASK, systemFor, type DocPayload } from "@/lib/prompts";
-import { completeJSON, DEFAULT_MODEL, isModelKey } from "@/lib/together";
+import { completeJSON, freeChain, modelInfo } from "@/lib/openrouter";
 import { undash, type BriefData } from "@/lib/article";
 import { chargeFree, checkFree, estimateUsd, needKey } from "@/lib/quota";
-import { MODELS } from "@/lib/models";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { apiKey?: string; model?: string; doc?: DocPayload };
+  let body: { apiKey?: string; models?: string[]; doc?: DocPayload };
   try {
     body = await req.json();
   } catch {
@@ -23,14 +22,14 @@ export async function POST(req: Request) {
   // A gloss of the whole text spends from the same free allowance.
   let free: Awaited<ReturnType<typeof checkFree>> | null = null;
   if (!apiKey) {
-    if (!process.env.TOGETHER_API_KEY) return needKey(null);
+    if (!process.env.OPENROUTER_API_KEY) return needKey(null);
     free = await checkFree(req);
     if (!free.ok) return needKey(free);
   }
 
-  const model = isModelKey(body.model) ? body.model : DEFAULT_MODEL;
+  const models = await freeChain(body.models ?? []);
   const result = await completeJSON<BriefData>({
-    model,
+    models,
     apiKey,
     signal: req.signal,
     // Thinking first: checking a text's headline figures against its own tables is arithmetic, and without it the
@@ -45,7 +44,7 @@ export async function POST(req: Request) {
   });
   if (free) {
     const chars = doc.paras.reduce((a, p) => a + (p.text?.length ?? 0), 0);
-    await chargeFree(free.subject, result.ok ? result.usage.costUsd : estimateUsd(chars, MODELS[model].inPerM));
+    await chargeFree(free.subject, result.ok ? result.usage.costUsd : estimateUsd(chars, (await modelInfo(models[0]))?.inPerM ?? 0));
   }
   if (!result.ok) return Response.json({ error: result.error }, { status: 502 });
 
@@ -69,5 +68,5 @@ export async function POST(req: Request) {
       .sort((a, b) => a.start - b.start)
       .slice(0, 10),
   };
-  return Response.json({ brief, usage: result.usage, model }, { headers: free ? { "X-Free-Left": free.left.toFixed(3) } : undefined });
+  return Response.json({ brief, usage: result.usage, model: result.model, modelId: result.modelId }, { headers: free ? { "X-Free-Left": free.left.toFixed(3) } : undefined });
 }

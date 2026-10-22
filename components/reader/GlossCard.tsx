@@ -5,7 +5,6 @@ import { forwardRef, useEffect, useRef, useState, type CSSProperties } from "rea
 import { ArrowUp, Check, ChevronsDownUp, Copy, CornerDownRight, RotateCcw, Square, Trash2 } from "lucide-react";
 import { ACTIONS } from "@/lib/actions";
 import { followUp, openKeyMenu, retry, stopGloss } from "@/lib/ask";
-import { MODELS } from "@/lib/models";
 import { useStore, type Gloss, type Turn } from "@/lib/store";
 import { undash } from "@/lib/article";
 import { Answer, keyLine, Sources, unmark } from "./Answer";

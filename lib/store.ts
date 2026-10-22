@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { Action } from "./actions";
 import type { Article, BriefData } from "./article";
-import { modelOf, type ModelKey, type Source, type Usage } from "./models";
+import type { ModelId, Source, Usage } from "./models";
 import { DEFAULT_SETTINGS, SETTINGS_KEY, type Marker, type Settings } from "./settings";
 
 /** A point in the text: block id and a character offset into its plain text. */
@@ -15,7 +15,8 @@ export type Turn = {
   content: string;
   usage?: Usage;
   model?: string;
-  modelKey?: ModelKey;
+  /** The model that answered, by its id. */
+  modelId?: ModelId;
   /** The reader needs their own key to continue: free answers are spent, or there is no shared key. */
   needKey?: boolean;
   /** Looking things up on the web before the answer starts. */
@@ -49,7 +50,7 @@ export type Highlight = { id: string; articleId: string; anchor: Anchor; created
 
 export type BriefState =
   | { status: "loading" }
-  | { status: "ready"; data: BriefData; usage?: Usage; modelKey?: ModelKey; at: number }
+  | { status: "ready"; data: BriefData; usage?: Usage; modelId?: ModelId; at: number }
   | { status: "error"; error: string; needKey?: boolean };
 
 export type { Settings } from "./settings";
@@ -197,13 +198,15 @@ export const useStore = create<State>((set, get) => ({
     }
     const briefs = data.briefs ?? {};
     for (const [k, b] of Object.entries(briefs)) if (b.status !== "ready") delete briefs[k];
+    // Older builds saved a single model; the chain of models replaced it.
+    delete (settings as { model?: unknown }).model;
     set({
       glosses,
       highlights: data.highlights ?? {},
       briefs,
       progress: data.progress ?? {},
       library: data.library ?? [],
-      settings: { ...DEFAULT_SETTINGS, ...settings, model: modelOf(settings.model) },
+      settings: { ...DEFAULT_SETTINGS, ...settings, models: Array.isArray(settings.models) ? settings.models.filter((m) => typeof m === "string" && m) : [] },
       hydrated: true,
     });
     void migrateDocs();

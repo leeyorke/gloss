@@ -1,9 +1,9 @@
 /**
- * The free allowance on the shared Together key, in dollars: what a reader's
- * answers and briefs actually cost Together, up to a small amount a day
- * (more when signed in). After that they bring their own key, which is never
- * counted. A ceiling across everyone keeps a rush of visitors bounded.
- * Reading aloud is never free: it uses the reader's own key.
+ * The free allowance on the shared OpenRouter key, in dollars: what a reader's
+ * answers and briefs actually cost, up to a small amount a day (more when
+ * signed in). After that they bring their own key, which is never counted. A
+ * ceiling across everyone keeps a rush of visitors bounded.
+ * Reading aloud is always free: it needs no key at all.
  *
  * Spent per day in Postgres, so the limit holds across serverless instances.
  * Signed-out readers are counted by a hash of their address. Without a
@@ -111,11 +111,11 @@ export function needKey(state: FreeState | null, message?: string): Response {
   const error =
     message ??
     (!state
-      ? "Add your Together API key to start. It stays in this browser."
+      ? "Add your OpenRouter API key to start. It stays in this browser."
       : state.reason === "everyone"
-        ? "Free answers are resting for today. Add your Together API key to keep going."
+        ? "Free answers are resting for today. Add your OpenRouter API key to keep going."
         : state.signedIn
-          ? "That's today's free reading. Add your Together API key to keep going, or come back tomorrow."
-          : "That's today's free reading. Sign in for more, or add your Together API key to keep going.");
+          ? "That's today's free reading. Add your OpenRouter API key to keep going, or come back tomorrow."
+          : "That's today's free reading. Sign in for more, or add your OpenRouter API key to keep going.");
   return Response.json({ error, code: "need_key", signIn: Boolean(state && !state.signedIn && state.reason === "reader") }, { status: state ? 429 : 401, headers: { "X-Free-Left": "0" } });
 }
